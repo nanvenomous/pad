@@ -262,8 +262,8 @@ func buildNotesMainProps(selectedID string, forceNew bool) (ui.PropsNotesMain, e
 		listItems = append(listItems, ui.NoteListItem{
 			ID:           item.ID,
 			Title:        item.Title,
-			Preview:      summarizeBody(item.Body),
 			UpdatedLabel: humanizeUpdated(item.UpdatedAt),
+			UpdatedAt:    formatUpdatedAt(item.UpdatedAt),
 			Selected:     hasSelected && item.ID == selected.ID,
 		})
 	}
@@ -276,6 +276,7 @@ func buildNotesMainProps(selectedID string, forceNew bool) (ui.PropsNotesMain, e
 			Body:         selected.Body,
 			Revision:     selected.Revision,
 			UpdatedLabel: humanizeUpdated(selected.UpdatedAt),
+			UpdatedAt:    formatUpdatedAt(selected.UpdatedAt),
 		}
 	}
 
@@ -284,19 +285,6 @@ func buildNotesMainProps(selectedID string, forceNew bool) (ui.PropsNotesMain, e
 		Editor:       editor,
 		HasSelection: hasSelected,
 	}, nil
-}
-
-func summarizeBody(body string) string {
-	trimmed := strings.TrimSpace(body)
-	if trimmed == "" {
-		return "No preview yet."
-	}
-
-	trimmed = strings.ReplaceAll(trimmed, "\n", " ")
-	if len(trimmed) > 120 {
-		return trimmed[:117] + "..."
-	}
-	return trimmed
 }
 
 func humanizeUpdated(updated time.Time) string {
@@ -317,4 +305,11 @@ func humanizeUpdated(updated time.Time) string {
 	default:
 		return updated.Format("Jan 2, 2006")
 	}
+}
+
+func formatUpdatedAt(updated time.Time) string {
+	if updated.IsZero() {
+		return ""
+	}
+	return updated.Format(time.RFC3339)
 }

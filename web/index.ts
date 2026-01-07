@@ -3,6 +3,7 @@ import { dismissAlert } from './alert'
 import { dialogEventHandler } from "./dialog";
 import { applySavedTheme, persistTheme, updateThemeDisplay } from './theme'
 import { initNoteEditors } from "./note_editor";
+import { initUpdatedLabels } from "./updated_time";
 
 const w = window as any;
 w.htmx = htmx;
@@ -13,7 +14,10 @@ w.applySavedTheme = applySavedTheme
 w.persistTheme = persistTheme
 w.updateThemeDisplay = updateThemeDisplay
 
-const initEditorsOnce = () => initNoteEditors(document);
+const initEditorsOnce = () => {
+  initNoteEditors(document);
+  initUpdatedLabels(document);
+};
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initEditorsOnce);
 } else {
@@ -21,4 +25,5 @@ if (document.readyState === "loading") {
 }
 htmx.onLoad((root) => {
   initNoteEditors(root);
+  initUpdatedLabels(root);
 });

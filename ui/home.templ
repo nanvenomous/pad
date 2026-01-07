@@ -5,8 +5,8 @@ import "fmt"
 type NoteListItem struct {
 	ID           string
 	Title        string
-	Preview      string
 	UpdatedLabel string
+	UpdatedAt    string
 	Selected     bool
 }
 
@@ -16,6 +16,7 @@ type NoteEditor struct {
 	Body         string
 	Revision     int
 	UpdatedLabel string
+	UpdatedAt    string
 }
 
 type PropsNotesMain struct {
@@ -49,7 +50,7 @@ templ NotesPage(props PropsNotesMain) {
 templ NotesSidebar(props PropsNotesMain, swapOOB bool) {
 	<aside
 		id="notesSidebar"
-		class="h-full w-72 overflow-y-auto rounded-2xl border border-base-200/70 bg-base-100/95 p-3 shadow-sm sm:w-80 lg:w-72"
+		class="flex h-full w-72 flex-col overflow-hidden rounded-2xl border border-base-200/70 bg-base-100/95 p-3 shadow-sm sm:w-80 lg:w-72"
 		if swapOOB {
 			hx-swap-oob="true"
 		}
@@ -72,7 +73,7 @@ templ NotesSidebar(props PropsNotesMain, swapOOB bool) {
 				New
 			</button>
 		</div>
-		<div class="mt-3 space-y-2">
+		<div class="mt-3 flex-1 space-y-2 overflow-y-auto pr-1">
 			if len(props.Items) == 0 {
 				<div class="rounded-xl border border-dashed border-base-300/80 bg-base-200/40 p-4 text-xs text-base-content/70">
 					No notes yet. Start a new markdown page to sync.
@@ -91,15 +92,17 @@ templ NotesSidebar(props PropsNotesMain, swapOOB bool) {
 				>
 					<div class="flex items-start justify-between gap-2">
 						<div class="font-semibold leading-tight">{ item.Title }</div>
-						<div class="text-[10px] uppercase tracking-[0.2em] text-base-content/50">
+						<div
+							class="text-[10px] uppercase tracking-[0.2em] text-base-content/50"
+							data-updated-at={ item.UpdatedAt }
+						>
 							{ item.UpdatedLabel }
 						</div>
 					</div>
-					<p class="mt-1.5 max-h-8 overflow-hidden text-xs text-base-content/60">{ item.Preview }</p>
 				</button>
 			}
 		</div>
-		<div class="mt-4 flex items-center justify-between gap-2">
+		<div class="mt-auto flex items-center justify-between gap-2 border-t border-base-200/60 pt-3">
 			<a class="btn btn-ghost btn-xs rounded-full" href="/theme">
 				@icon("", "ph-gear text-sm")
 				Settings
@@ -126,24 +129,47 @@ templ NotesEditorHeader(props PropsNotesMain, swapOOB bool) {
 			</h2>
 			<p class="text-[11px] uppercase tracking-[0.2em] text-base-content/50">
 				if props.HasSelection {
-					Updated { props.Editor.UpdatedLabel }
+					Updated <span data-updated-at={ props.Editor.UpdatedAt }>{ props.Editor.UpdatedLabel }</span>
 				} else {
 					Starts with a # heading for the title
 				}
 			</p>
 		</div>
-		<div
-			id="saveStatus"
-			class="badge badge-ghost gap-2 text-[10px] uppercase tracking-[0.2em] text-base-content/60"
-		>
-			<span class="ShowOnRequest flex items-center gap-1">
-				<span class="loading loading-spinner loading-xs"></span>
-				Saving
-			</span>
-			<span class="HideOnRequest flex items-center gap-1">
-				@icon("", "ph-check-circle text-sm")
-				Saved
-			</span>
+		<div class="flex items-center gap-2">
+			<div
+				id="saveStatus"
+				class="badge badge-ghost gap-2 text-[10px] uppercase tracking-[0.2em] text-base-content/60"
+			>
+				<span class="ShowOnRequest flex items-center gap-1">
+					<span class="loading loading-spinner loading-xs"></span>
+					Saving
+				</span>
+				<span class="HideOnRequest flex items-center gap-1">
+					@icon("", "ph-check-circle text-sm")
+					Saved
+				</span>
+			</div>
+			<div class="dropdown dropdown-end">
+				<div tabindex="0" role="button" class="btn btn-ghost btn-xs rounded-full">
+					@icon("", "ph-dots-three-vertical text-sm")
+				</div>
+				<ul tabindex="0" class="dropdown-content menu rounded-box z-[1] w-40 bg-base-100 p-1 shadow">
+					<li>
+						<button
+							id="notesDeleteButton"
+							class="text-error"
+							type="button"
+							hx-post="/notes/delete"
+							hx-target="#notesMain"
+							hx-swap="outerHTML"
+							hx-include="#notesMeta"
+						>
+							@icon("", "ph-trash text-base")
+							Delete
+						</button>
+					</li>
+				</ul>
+			</div>
 		</div>
 	</div>
 }
@@ -169,24 +195,6 @@ templ NotesEditorMeta(props PropsNotesMain, swapOOB bool) {
 			value={ fmt.Sprintf("%d", props.Editor.Revision) }
 		/>
 	</div>
-}
-
-templ NotesDeleteButton(props PropsNotesMain, swapOOB bool) {
-	<button
-		id="notesDeleteButton"
-		class="btn btn-sm btn-ghost rounded-full text-error cursor-pointer"
-		type="button"
-		hx-post="/notes/delete"
-		hx-target="#notesMain"
-		hx-swap="outerHTML"
-		hx-include="#notesMeta"
-		if swapOOB {
-			hx-swap-oob="outerHTML"
-		}
-	>
-		@icon("", "ph-trash text-base")
-		Delete
-	</button>
 }
 
 templ NotesMain(props PropsNotesMain, swapOOB bool) {
@@ -235,9 +243,6 @@ templ NotesMain(props PropsNotesMain, swapOOB bool) {
 								>{ props.Editor.Body }</textarea>
 							</div>
 						</div>
-						<div class="flex flex-wrap items-center justify-between gap-3">
-							@NotesDeleteButton(props, false)
-						</div>
 					</form>
 				</section>
 			</div>
@@ -255,5 +260,4 @@ templ NotesAutosaveResponse(props PropsNotesMain) {
 	@NotesSidebar(props, true)
 	@NotesEditorHeader(props, true)
 	@NotesEditorMeta(props, true)
-	@NotesDeleteButton(props, true)
 }
