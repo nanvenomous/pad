@@ -219,14 +219,22 @@ templ NotesMain(props PropsNotesMain, swapOOB bool) {
 						hx-indicator="#saveStatus"
 					>
 						@NotesEditorMeta(props, false)
-						<label class="form-control flex min-h-0 w-full flex-1">
-							<textarea
-								id="noteBody"
-								name="body"
-								class="textarea textarea-bordered min-h-0 w-full flex-1 overflow-y-auto rounded-2xl bg-base-200/50 text-sm leading-6 focus:border-accent focus:outline-none"
-								placeholder="# New idea&#10;&#10;Write in markdown. Sync resolves conflicts at the server."
-							>{ props.Editor.Body }</textarea>
-						</label>
+						<div class="form-control flex min-h-0 w-full flex-1">
+							<div data-note-editor class="flex min-h-0 w-full flex-1 flex-col">
+								<div
+									id="noteRender"
+									data-note-render
+									class="note-render hidden min-h-0 w-full flex-1 overflow-y-auto rounded-2xl bg-base-200/50 p-3 text-sm leading-6"
+								></div>
+								<textarea
+									id="noteBody"
+									name="body"
+									data-note-body
+									class="textarea textarea-bordered min-h-0 w-full flex-1 overflow-y-auto rounded-2xl bg-base-200/50 text-sm leading-6 focus:border-accent focus:outline-none"
+									placeholder="# New idea&#10;&#10;Write in markdown. Sync resolves conflicts at the server."
+								>{ props.Editor.Body }</textarea>
+							</div>
+						</div>
 						<div class="flex flex-wrap items-center justify-between gap-3">
 							@NotesDeleteButton(props, false)
 						</div>
