@@ -13,7 +13,7 @@ import (
 	"github.com/nanvenomous/pad/ui"
 )
 
-const defaultNotesPath = "data/notes.json"
+const defaultNotesDir = "/tmp/pad"
 
 var (
 	notesStore     *notes.Store
@@ -23,11 +23,11 @@ var (
 
 func getNotesStore() (*notes.Store, error) {
 	notesStoreOnce.Do(func() {
-		path := os.Getenv("PAD_NOTES_PATH")
-		if path == "" {
-			path = defaultNotesPath
+		dir := os.Getenv("PAD_NOTES_DIR")
+		if dir == "" {
+			dir = defaultNotesDir
 		}
-		notesStore, notesStoreErr = notes.NewStore(path)
+		notesStore, notesStoreErr = notes.NewStore(dir)
 	})
 	return notesStore, notesStoreErr
 }
@@ -69,7 +69,7 @@ func NotesSelectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stts, err := render(w, r, ui.NotesMain(mainProps))
+	stts, err := render(w, r, ui.NotesMain(mainProps, false))
 	if err != nil {
 		errorHTTP(w, stts, err)
 	}
@@ -82,7 +82,7 @@ func NotesNewHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stts, err := render(w, r, ui.NotesMain(mainProps))
+	stts, err := render(w, r, ui.NotesMain(mainProps, false))
 	if err != nil {
 		errorHTTP(w, stts, err)
 	}
@@ -104,6 +104,8 @@ func NotesSaveHandler(w http.ResponseWriter, r *http.Request) {
 		errorHTTP(w, http.StatusBadRequest, err)
 		return
 	}
+
+	time.Sleep(250 * time.Millisecond)
 
 	id := strings.TrimSpace(r.FormValue("id"))
 	body := r.FormValue("body")
@@ -132,8 +134,9 @@ func NotesSaveHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	saveErr := err
 	selectedID := note.ID
-	if err == notes.ErrNotFound {
+	if saveErr == notes.ErrNotFound {
 		selectedID = ""
 	}
 
@@ -143,14 +146,23 @@ func NotesSaveHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	components := []templ.Component{ui.NotesMain(mainProps)}
-	if err == notes.ErrConflict {
+	useHX := r.Header.Get("HX-Request") == "true"
+	hasConflict := saveErr == notes.ErrConflict || saveErr == notes.ErrNotFound
+	components := make([]templ.Component, 0, 2)
+	if useHX && !hasConflict {
+		components = append(components, ui.NotesAutosaveResponse(mainProps))
+	} else if useHX && hasConflict {
+		components = append(components, ui.NotesMain(mainProps, true))
+	} else {
+		components = append(components, ui.NotesMain(mainProps, false))
+	}
+	if saveErr == notes.ErrConflict {
 		components = append(components, ui.Alert(ui.PropsAlert{
 			Label: "Sync conflict detected. You are viewing the latest server version.",
 			Type:  ui.AlertTypeWarning,
 		}))
 	}
-	if err == notes.ErrNotFound {
+	if saveErr == notes.ErrNotFound {
 		components = append(components, ui.Alert(ui.PropsAlert{
 			Label: "That note no longer exists. Pick another or create a new one.",
 			Type:  ui.AlertTypeInfo,
@@ -201,7 +213,7 @@ func NotesDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	components := []templ.Component{ui.NotesMain(mainProps)}
+	components := []templ.Component{ui.NotesMain(mainProps, false)}
 	if err == notes.ErrConflict {
 		components = append(components, ui.Alert(ui.PropsAlert{
 			Label: "Note changed elsewhere. Showing the latest list.",

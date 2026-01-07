@@ -4,9 +4,12 @@ services:
       - "4005:4005"
     build:
       dockerfile: ./Dockerfile.dev
+    environment:
+      PAD_NOTES_DIR: /tmp/pad
     volumes:
       - ./:/app
       - /app/tmp
+      - ./tmp/pad:/tmp/pad
     networks:
       - net
 

@@ -49,94 +49,151 @@ templ NotesPage(props PropsNotesMain) {
 				</a>
 			</div>
 			<div class="mx-auto mt-4 max-w-6xl">
-				@NotesMain(props)
+				@NotesMain(props, false)
 			</div>
 		</div>
 	}
 }
 
-templ NotesMain(props PropsNotesMain) {
-	<section id="notesMain" class="grid gap-4 lg:grid-cols-[280px_1fr]">
-		<aside class="rounded-2xl border border-base-200/70 bg-base-100/80 p-3 shadow-sm">
-			<div class="flex items-center justify-between gap-2">
-				<div class="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-base-content/60">
-					@icon("", "ph-stack text-lg")
-					<span>Notes</span>
-					<span class="rounded-full bg-base-200 px-2 py-0.5 text-[10px]">
-						{ fmt.Sprintf("%d", len(props.Items)) }
-					</span>
+templ NotesSidebar(props PropsNotesMain, swapOOB bool) {
+	<aside
+		id="notesSidebar"
+		class="rounded-2xl border border-base-200/70 bg-base-100/80 p-3 shadow-sm"
+		if swapOOB {
+			hx-swap-oob="true"
+		}
+	>
+		<div class="flex items-center justify-between gap-2">
+			<div class="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-base-content/60">
+				@icon("", "ph-stack text-lg")
+				<span>Notes</span>
+				<span class="rounded-full bg-base-200 px-2 py-0.5 text-[10px]">
+					{ fmt.Sprintf("%d", len(props.Items)) }
+				</span>
+			</div>
+			<button
+				class="btn btn-xs rounded-full bg-accent text-accent-content hover:bg-accent/90"
+				hx-post="/notes/new"
+				hx-target="#notesMain"
+				hx-swap="outerHTML"
+			>
+				@icon("", "ph-plus-circle text-base")
+				New
+			</button>
+		</div>
+		<div class="mt-3 space-y-2">
+			if len(props.Items) == 0 {
+				<div class="rounded-xl border border-dashed border-base-300/80 bg-base-200/40 p-4 text-xs text-base-content/70">
+					No notes yet. Start a new markdown page to sync.
 				</div>
+			}
+			for _, item := range props.Items {
 				<button
-					class="btn btn-xs rounded-full bg-accent text-accent-content hover:bg-accent/90"
-					hx-post="/notes/new"
+					class={
+						"w-full rounded-xl border border-base-200/60 bg-base-100/70 px-3 py-2.5 text-left text-sm transition",
+						templ.KV("border-accent/70 bg-accent/10 shadow-md", item.Selected),
+						templ.KV("hover:border-accent/50", !item.Selected),
+					}
+					hx-get={ "/notes/select?id=" + item.ID }
 					hx-target="#notesMain"
 					hx-swap="outerHTML"
 				>
-					@icon("", "ph-plus-circle text-base")
-					New
-				</button>
-			</div>
-			<div class="mt-3 space-y-2">
-				if len(props.Items) == 0 {
-					<div class="rounded-xl border border-dashed border-base-300/80 bg-base-200/40 p-4 text-xs text-base-content/70">
-						No notes yet. Start a new markdown page to sync.
-					</div>
-				}
-				for _, item := range props.Items {
-					<button
-						class={
-							"w-full rounded-xl border border-base-200/60 bg-base-100/70 px-3 py-2.5 text-left text-sm transition",
-							templ.KV("border-accent/70 bg-accent/10 shadow-md", item.Selected),
-							templ.KV("hover:border-accent/50", !item.Selected),
-						}
-						hx-get={ "/notes/select?id=" + item.ID }
-						hx-target="#notesMain"
-						hx-swap="outerHTML"
-					>
-						<div class="flex items-start justify-between gap-2">
-							<div class="font-semibold leading-tight">{ item.Title }</div>
-							<div class="text-[10px] uppercase tracking-[0.2em] text-base-content/50">
-								{ item.UpdatedLabel }
-							</div>
+					<div class="flex items-start justify-between gap-2">
+						<div class="font-semibold leading-tight">{ item.Title }</div>
+						<div class="text-[10px] uppercase tracking-[0.2em] text-base-content/50">
+							{ item.UpdatedLabel }
 						</div>
-						<p class="mt-1.5 max-h-8 overflow-hidden text-xs text-base-content/60">{ item.Preview }</p>
-					</button>
+					</div>
+					<p class="mt-1.5 max-h-8 overflow-hidden text-xs text-base-content/60">{ item.Preview }</p>
+				</button>
+			}
+		</div>
+	</aside>
+}
+
+templ NotesEditorHeader(props PropsNotesMain, swapOOB bool) {
+	<div
+		id="editorHeader"
+		class="flex flex-wrap items-center justify-between gap-3"
+		if swapOOB {
+			hx-swap-oob="true"
+		}
+	>
+		<div>
+			<h2 class="text-base font-semibold">
+				if props.HasSelection {
+					{ props.Editor.Title }
+				} else {
+					New note
 				}
-			</div>
-		</aside>
+			</h2>
+			<p class="text-[11px] uppercase tracking-[0.2em] text-base-content/50">
+				if props.HasSelection {
+					Updated { props.Editor.UpdatedLabel }
+				} else {
+					Starts with a # heading for the title
+				}
+			</p>
+		</div>
+		<div
+			id="saveStatus"
+			class="badge badge-ghost gap-2 text-[10px] uppercase tracking-[0.2em] text-base-content/60"
+		>
+			<span class="ShowOnRequest flex items-center gap-1">
+				<span class="loading loading-spinner loading-xs"></span>
+				Saving
+			</span>
+			<span class="HideOnRequest flex items-center gap-1">
+				@icon("", "ph-check-circle text-sm")
+				Saved
+			</span>
+		</div>
+	</div>
+}
+
+templ NotesEditorMeta(props PropsNotesMain, swapOOB bool) {
+	<input
+		id="noteId"
+		type="hidden"
+		name="id"
+		value={ props.Editor.ID }
+		if swapOOB {
+			hx-swap-oob="true"
+		}
+	/>
+	<input
+		id="noteRevision"
+		type="hidden"
+		name="revision"
+		value={ fmt.Sprintf("%d", props.Editor.Revision) }
+		if swapOOB {
+			hx-swap-oob="true"
+		}
+	/>
+}
+
+templ NotesMain(props PropsNotesMain, swapOOB bool) {
+	<section
+		id="notesMain"
+		class="grid gap-4 lg:grid-cols-[280px_1fr]"
+		if swapOOB {
+			hx-swap-oob="true"
+		}
+	>
+		@NotesSidebar(props, false)
 
 		<section class="rounded-2xl border border-base-200/70 bg-base-100/90 p-4 shadow-lg">
-			<div class="flex flex-wrap items-center justify-between gap-3">
-				<div>
-					<h2 class="text-base font-semibold">
-						if props.HasSelection {
-							{ props.Editor.Title }
-						} else {
-							New note
-						}
-					</h2>
-					<p class="text-[11px] uppercase tracking-[0.2em] text-base-content/50">
-						if props.HasSelection {
-							Updated { props.Editor.UpdatedLabel }
-						} else {
-							Starts with a # heading for the title
-						}
-					</p>
-				</div>
-				<div class="flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-base-content/50">
-					@icon("", "ph-cloud-arrow-up text-base")
-					<span>HTMX sync</span>
-				</div>
-			</div>
+			@NotesEditorHeader(props, false)
 
 			<form
 				class="mt-4 space-y-3"
 				hx-post="/notes/save"
-				hx-target="#notesMain"
-				hx-swap="outerHTML"
+				hx-swap="none"
+				hx-trigger="input changed delay:700ms from:textarea"
+				hx-sync="this:replace"
+				hx-indicator="#saveStatus"
 			>
-				<input type="hidden" name="id" value={ props.Editor.ID }/>
-				<input type="hidden" name="revision" value={ fmt.Sprintf("%d", props.Editor.Revision) }/>
+				@NotesEditorMeta(props, false)
 
 				<label class="form-control w-full">
 					<div class="label pb-1">
@@ -145,6 +202,7 @@ templ NotesMain(props PropsNotesMain) {
 						</span>
 					</div>
 					<textarea
+						id="noteBody"
 						name="body"
 						class="textarea textarea-bordered min-h-[55vh] w-full rounded-2xl bg-base-200/50 text-sm leading-6 focus:border-accent focus:outline-none"
 						placeholder="# New idea&#10;&#10;Write in markdown. Sync resolves conflicts at the server."
@@ -152,10 +210,6 @@ templ NotesMain(props PropsNotesMain) {
 				</label>
 
 				<div class="flex flex-wrap items-center justify-between gap-3">
-					<button class="btn btn-sm rounded-full bg-accent text-accent-content hover:bg-accent/90" type="submit">
-						@icon("", "ph-floppy-disk text-base")
-						Save
-					</button>
 					<button
 						class="btn btn-sm btn-ghost rounded-full text-error"
 						type="button"
@@ -179,4 +233,10 @@ templ NotesMain(props PropsNotesMain) {
 			</div>
 		</section>
 	</section>
+}
+
+templ NotesAutosaveResponse(props PropsNotesMain) {
+	@NotesSidebar(props, true)
+	@NotesEditorHeader(props, true)
+	@NotesEditorMeta(props, true)
 }

@@ -19,3 +19,11 @@
 .htmx-request .HideOnRequest {
   display: none;
 }
+
+.ShowOnRequest {
+  display: none;
+}
+
+.htmx-request .ShowOnRequest {
+  display: inline-flex;
+}
