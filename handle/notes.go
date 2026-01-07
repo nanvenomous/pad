@@ -111,7 +111,7 @@ func NotesSaveHandler(w http.ResponseWriter, r *http.Request) {
 	body := r.FormValue("body")
 	revision, _ := strconv.Atoi(r.FormValue("revision"))
 
-	title := normalizeTitle(body)
+	title := notes.NormalizeTitleFromBody(body)
 
 	var note notes.Note
 	if id == "" {
@@ -284,27 +284,6 @@ func buildNotesMainProps(selectedID string, forceNew bool) (ui.PropsNotesMain, e
 		Editor:       editor,
 		HasSelection: hasSelected,
 	}, nil
-}
-
-func normalizeTitle(body string) string {
-	lines := strings.Split(body, "\n")
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			continue
-		}
-		hashCount := 0
-		for _, ch := range trimmed {
-			if ch != '#' {
-				break
-			}
-			hashCount++
-		}
-		if hashCount > 0 && len(trimmed) > hashCount && trimmed[hashCount] == ' ' {
-			return strings.TrimSpace(trimmed[hashCount:])
-		}
-	}
-	return "Untitled"
 }
 
 func summarizeBody(body string) string {

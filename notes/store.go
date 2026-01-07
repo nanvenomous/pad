@@ -113,6 +113,7 @@ func (s *Store) Create(title, body string) (Note, error) {
 	}
 
 	now := time.Now().UTC()
+	title = NormalizeTitle(title)
 	note := Note{
 		ID:        id,
 		Title:     title,
@@ -148,7 +149,7 @@ func (s *Store) Update(id, title, body string, expectedRevision int) (Note, erro
 	}
 
 	now := time.Now().UTC()
-	note.Title = title
+	note.Title = NormalizeTitle(title)
 	note.Body = body
 	note.UpdatedAt = now
 	note.Revision++
@@ -183,7 +184,7 @@ func (s *Store) Upsert(id, title, body string, expectedRevision int, allowCreate
 
 		note = Note{
 			ID:        id,
-			Title:     title,
+			Title:     NormalizeTitle(title),
 			Body:      body,
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -198,7 +199,7 @@ func (s *Store) Upsert(id, title, body string, expectedRevision int, allowCreate
 		return note, ErrConflict
 	}
 
-	note.Title = title
+	note.Title = NormalizeTitle(title)
 	note.Body = body
 	note.UpdatedAt = time.Now().UTC()
 	note.Revision++
@@ -246,6 +247,7 @@ func (s *Store) load() error {
 	if err != nil {
 		return err
 	}
+	hasMetadata := len(meta) > 0
 
 	for id, info := range meta {
 		if !isValidID(id) {
@@ -257,9 +259,13 @@ func (s *Store) load() error {
 			return err
 		}
 		s.filenames[id] = filename
+		title := NormalizeTitle(info.Title)
+		if title == defaultTitle && strings.TrimSpace(info.Title) == "" {
+			title = NormalizeTitleFromBody(body)
+		}
 		s.notes[id] = Note{
 			ID:        id,
-			Title:     info.Title,
+			Title:     title,
 			Body:      body,
 			CreatedAt: info.CreatedAt,
 			UpdatedAt: info.UpdatedAt,
@@ -268,42 +274,44 @@ func (s *Store) load() error {
 		}
 	}
 
-	entries, err := os.ReadDir(s.dir)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		if filepath.Ext(entry.Name()) != notesFileExtension {
-			continue
-		}
-		id := strings.TrimSuffix(entry.Name(), notesFileExtension)
-		if !isValidID(id) {
-			continue
-		}
-		if _, exists := s.notes[id]; exists {
-			continue
-		}
-		body, err := s.loadBodyByFilename(entry.Name())
+	if !hasMetadata {
+		entries, err := os.ReadDir(s.dir)
 		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
 			return err
 		}
-		now := time.Now().UTC()
-		s.filenames[id] = entry.Name()
-		s.notes[id] = Note{
-			ID:        id,
-			Title:     titleFromBody(body),
-			Body:      body,
-			CreatedAt: now,
-			UpdatedAt: now,
-			Revision:  1,
-			Deleted:   false,
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			if filepath.Ext(entry.Name()) != notesFileExtension {
+				continue
+			}
+			id := strings.TrimSuffix(entry.Name(), notesFileExtension)
+			if !isValidID(id) {
+				continue
+			}
+			if _, exists := s.notes[id]; exists {
+				continue
+			}
+			body, err := s.loadBodyByFilename(entry.Name())
+			if err != nil {
+				return err
+			}
+			now := time.Now().UTC()
+			s.filenames[id] = entry.Name()
+			s.notes[id] = Note{
+				ID:        id,
+				Title:     NormalizeTitleFromBody(body),
+				Body:      body,
+				CreatedAt: now,
+				UpdatedAt: now,
+				Revision:  1,
+				Deleted:   false,
+			}
 		}
 	}
 
@@ -467,15 +475,6 @@ func isValidID(id string) bool {
 		return false
 	}
 	return true
-}
-
-func titleFromBody(body string) string {
-	trimmed := strings.TrimSpace(body)
-	if trimmed == "" {
-		return "Untitled"
-	}
-	lines := strings.Split(trimmed, "\n")
-	return strings.TrimSpace(lines[0])
 }
 
 func slugify(value string) string {
