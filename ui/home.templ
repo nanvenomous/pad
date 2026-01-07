@@ -1,45 +1,182 @@
 package ui
 
+import "fmt"
+
+type NoteListItem struct {
+	ID           string
+	Title        string
+	Preview      string
+	UpdatedLabel string
+	Selected     bool
+}
+
+type NoteEditor struct {
+	ID           string
+	Title        string
+	Body         string
+	Revision     int
+	UpdatedLabel string
+}
+
+type PropsNotesMain struct {
+	Items        []NoteListItem
+	Editor       NoteEditor
+	HasSelection bool
+}
+
 templ Home() {
+	@NotesPage(PropsNotesMain{})
+}
+
+templ NotesPage(props PropsNotesMain) {
 	@Page() {
-		@htmxCounter()
+		<div class="min-h-screen w-full px-4 pb-6 pt-4 lg:px-6">
+			<div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4">
+				<div class="flex items-center gap-3">
+					<div class="h-9 w-9 rounded-xl bg-accent/20 p-2 text-accent">
+						@icon("", "ph-notebook text-xl")
+					</div>
+					<div class="flex items-center gap-3">
+						<h1 class="text-2xl font-bold tracking-tight">Pad</h1>
+						<span class="rounded-full bg-base-200/80 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-base-content/60">
+							Sync ready
+						</span>
+					</div>
+				</div>
+				<a class="btn btn-ghost btn-sm rounded-full" href="/theme">
+					@icon("", "ph-gear text-lg")
+					Settings
+				</a>
+			</div>
+			<div class="mx-auto mt-4 max-w-6xl">
+				@NotesMain(props)
+			</div>
+		</div>
 	}
 }
 
-templ htmxCounter() {
-	<div class="w-full h-full flex items-center justify-center">
-		<div class="card w-96 bg-base-100 shadow-xl">
-			<div class="card-body items-center text-center">
-				<h2 class="card-title">HTMX Counter</h2>
-				<div class="stat">
-					<div class="stat-title">Current Count</div>
-					<div class="stat-value text-secondary" id="counter-value">0</div>
+templ NotesMain(props PropsNotesMain) {
+	<section id="notesMain" class="grid gap-4 lg:grid-cols-[280px_1fr]">
+		<aside class="rounded-2xl border border-base-200/70 bg-base-100/80 p-3 shadow-sm">
+			<div class="flex items-center justify-between gap-2">
+				<div class="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-base-content/60">
+					@icon("", "ph-stack text-lg")
+					<span>Notes</span>
+					<span class="rounded-full bg-base-200 px-2 py-0.5 text-[10px]">
+						{ fmt.Sprintf("%d", len(props.Items)) }
+					</span>
 				</div>
-				<div class="card-actions justify-center gap-4">
+				<button
+					class="btn btn-xs rounded-full bg-accent text-accent-content hover:bg-accent/90"
+					hx-post="/notes/new"
+					hx-target="#notesMain"
+					hx-swap="outerHTML"
+				>
+					@icon("", "ph-plus-circle text-base")
+					New
+				</button>
+			</div>
+			<div class="mt-3 space-y-2">
+				if len(props.Items) == 0 {
+					<div class="rounded-xl border border-dashed border-base-300/80 bg-base-200/40 p-4 text-xs text-base-content/70">
+						No notes yet. Start a new markdown page to sync.
+					</div>
+				}
+				for _, item := range props.Items {
 					<button
-						class="btn btn-error"
-						hx-post="/counter?op=dec"
-						hx-target="#counter-value"
-						hx-swap="innerHTML"
+						class={
+							"w-full rounded-xl border border-base-200/60 bg-base-100/70 px-3 py-2.5 text-left text-sm transition",
+							templ.KV("border-accent/70 bg-accent/10 shadow-md", item.Selected),
+							templ.KV("hover:border-accent/50", !item.Selected),
+						}
+						hx-get={ "/notes/select?id=" + item.ID }
+						hx-target="#notesMain"
+						hx-swap="outerHTML"
 					>
-						<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
-						</svg>
-						Decrement
+						<div class="flex items-start justify-between gap-2">
+							<div class="font-semibold leading-tight">{ item.Title }</div>
+							<div class="text-[10px] uppercase tracking-[0.2em] text-base-content/50">
+								{ item.UpdatedLabel }
+							</div>
+						</div>
+						<p class="mt-1.5 max-h-8 overflow-hidden text-xs text-base-content/60">{ item.Preview }</p>
 					</button>
-					<button
-						class="btn btn-primary"
-						hx-post="/counter?op=inc"
-						hx-target="#counter-value"
-						hx-swap="innerHTML"
-					>
-						<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-						</svg>
-						Increment
-					</button>
+				}
+			</div>
+		</aside>
+
+		<section class="rounded-2xl border border-base-200/70 bg-base-100/90 p-4 shadow-lg">
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<div>
+					<h2 class="text-base font-semibold">
+						if props.HasSelection {
+							{ props.Editor.Title }
+						} else {
+							New note
+						}
+					</h2>
+					<p class="text-[11px] uppercase tracking-[0.2em] text-base-content/50">
+						if props.HasSelection {
+							Updated { props.Editor.UpdatedLabel }
+						} else {
+							Starts with a # heading for the title
+						}
+					</p>
+				</div>
+				<div class="flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-base-content/50">
+					@icon("", "ph-cloud-arrow-up text-base")
+					<span>HTMX sync</span>
 				</div>
 			</div>
-		</div>
-	</div>
+
+			<form
+				class="mt-4 space-y-3"
+				hx-post="/notes/save"
+				hx-target="#notesMain"
+				hx-swap="outerHTML"
+			>
+				<input type="hidden" name="id" value={ props.Editor.ID }/>
+				<input type="hidden" name="revision" value={ fmt.Sprintf("%d", props.Editor.Revision) }/>
+
+				<label class="form-control w-full">
+					<div class="label pb-1">
+						<span class="label-text text-[11px] uppercase tracking-[0.2em] text-base-content/60">
+							Markdown (title pulled from first # heading)
+						</span>
+					</div>
+					<textarea
+						name="body"
+						class="textarea textarea-bordered min-h-[55vh] w-full rounded-2xl bg-base-200/50 text-sm leading-6 focus:border-accent focus:outline-none"
+						placeholder="# New idea&#10;&#10;Write in markdown. Sync resolves conflicts at the server."
+					>{ props.Editor.Body }</textarea>
+				</label>
+
+				<div class="flex flex-wrap items-center justify-between gap-3">
+					<button class="btn btn-sm rounded-full bg-accent text-accent-content hover:bg-accent/90" type="submit">
+						@icon("", "ph-floppy-disk text-base")
+						Save
+					</button>
+					<button
+						class="btn btn-sm btn-ghost rounded-full text-error"
+						type="button"
+						hx-post="/notes/delete"
+						hx-target="#notesMain"
+						hx-swap="outerHTML"
+						hx-include="closest form"
+						disabled={ !props.HasSelection }
+					>
+						@icon("", "ph-trash text-base")
+						Delete
+					</button>
+				</div>
+			</form>
+
+			<div class="mt-3 rounded-xl bg-base-200/60 p-3 text-[11px] text-base-content/60">
+				<div class="flex flex-wrap items-center gap-2">
+					@icon("", "ph-git-merge text-base")
+					<span>Conflicts return 409 with the latest server copy.</span>
+				</div>
+			</div>
+		</section>
+	</section>
 }

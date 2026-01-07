@@ -7,8 +7,7 @@ import (
 )
 
 var (
-	logo                  = "./assets/package.svg"
-	cssBackgroundGradient = "bg-gradient-to-r from-blue-200 via-sky-100 to-blue-100 dark:from-base-300 dark:via-[#182d70] dark:to-base-200"
+	logo = "./assets/package.svg"
 )
 
 func NanoID() string {
@@ -18,10 +17,6 @@ func NanoID() string {
 		return fmt.Sprintf("%d", rand.Intn(max-min+1)+min)
 	}
 	return id
-}
-
-templ appLogo() {
-	<img class="h-10 ml-4" src={ logo }/>
 }
 
 // Multi sends multiple templ components one after the other
@@ -48,14 +43,14 @@ var (
 
 templ headers() {
 	<meta charset="utf-8"/>
-	<meta name="description" content="SSR Starter"/>
+	<meta name="description" content="Self-hosted markdown notes with fast conflict-aware sync."/>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 	for _, lk := range headerLinks {
 		<link rel={ lk.Rel } href={ lk.Href }/>
 	}
 	<script src="/index.js"></script>
 	@templ.JSFuncCall("applySavedTheme")
-	<title>SSR Starter</title>
+	<title>Pad</title>
 }
 
 type PropsEmptyModalPopover struct {
@@ -87,20 +82,12 @@ templ Page() {
 	<head>
 		@headers()
 	</head>
-	<body class="absolute top-0 bottom-0 left-0 right-0 bg-base-100">
+	<body class="absolute top-0 bottom-0 left-0 right-0 bg-base-100 font-pad bg-[radial-gradient(circle_at_15%_10%,rgba(56,189,248,0.18),transparent_45%),radial-gradient(circle_at_85%_20%,rgba(249,115,22,0.15),transparent_45%),radial-gradient(circle_at_20%_80%,rgba(52,211,153,0.12),transparent_50%),linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.92))] dark:bg-[radial-gradient(circle_at_20%_20%,rgba(14,165,233,0.18),transparent_45%),radial-gradient(circle_at_80%_15%,rgba(59,130,246,0.18),transparent_45%),radial-gradient(circle_at_70%_80%,rgba(16,185,129,0.15),transparent_50%),linear-gradient(135deg,rgba(10,15,26,0.98),rgba(2,6,23,0.98))]">
 		@popovers()
-		@navSideBar() {
-			<div id={ "appContent" } class="w-full h-full">
-				{ children... }
-			</div>
-		}
+		<div id={ "appContent" } class="w-full h-full">
+			{ children... }
+		</div>
 	</body>
-}
-
-templ tooltip(label, targetID, triggerID, css string) {
-	<div class={ "tooltip", css } data-tip={ label }>
-		{ children... }
-	</div>
 }
 
 templ icon(id, css string) {
@@ -110,45 +97,4 @@ templ icon(id, css string) {
 		}
 		class={ "ph-light", css }
 	></i>
-}
-
-templ sideBarItem(id, name, icn string, rt string) {
-	@tooltip(name, "", "", "tooltip-bottom") {
-		<a href={ templ.SafeURL(rt) }>
-			<li
-				id={ id }
-				class={ "flex items-center p-2 rounded-lg group btn-ghost", }
-			>
-				@icon("", icn+" text-2xl")
-			</li>
-		</a>
-	}
-}
-
-templ navSideBarItems() {
-	@sideBarItem("searchIntakesSidebarButton", "Search Intakes", "ph-magnifying-glass", "/")
-}
-
-templ navSideBar() {
-	<div class="drawer w-full h-full">
-		<input id="my-drawer-2" type="checkbox" class="drawer-toggle"/>
-		<div class="drawer-content">
-			<!-- Page content here -->
-			<label for="my-drawer-2" class="btn drawer-button">
-				@icon("", "ph-list text-3xl")
-			</label>
-			{ children... }
-		</div>
-		<div class="drawer-side">
-			<label for="my-drawer-2" aria-label="close sidebar" class="drawer-overlay"></label>
-			<ul class="menu bg-base-200 min-h-full w-80 p-4">
-				<!-- Sidebar content here -->
-				<li><a href={ "/alert" }>Alerts</a></li>
-				<li><a href={ "/" }>Counter</a></li>
-				<li><a href={ "/modal" }>Modal</a></li>
-				<li><a href={ "/progress" }>Progress</a></li>
-				<li><a href={ "/theme" }>Theme</a></li>
-			</ul>
-		</div>
-	</div>
 }

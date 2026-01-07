@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap");
 @import "tailwindcss";
 @tailwind utilities;
 
@@ -10,6 +11,10 @@
 }
 
 @custom-variant dark (&:where([data-theme=synthwave], [data-theme=synthwave] *));
+
+.font-pad {
+  font-family: "Space Grotesk", "Avenir Next", "Trebuchet MS", sans-serif;
+}
 
 .htmx-request .HideOnRequest {
   display: none;
