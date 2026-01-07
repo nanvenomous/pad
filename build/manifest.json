@@ -1,0 +1,12 @@
+{
+  "name": "Pad",
+  "short_name": "Pad",
+  "description": "self hostable autosync notes",
+  "background_color": "#1e3a8a",
+  "theme_color": "#13ecf3",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "icons": [
+  ]
+}
