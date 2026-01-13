@@ -279,11 +279,11 @@ func NotesMoveModalHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	folders := collectFolders(store.List(false))
+	folders := collectFolders(store, store.List(false))
 	props := ui.PropsNoteActions{
 		ID:       note.ID,
 		Title:    note.Title,
-		Folder:   folderFromID(note.ID),
+		Folder:   store.Folder(note.ID),
 		Revision: note.Revision,
 		Folders:  folders,
 	}
@@ -397,7 +397,7 @@ func buildNotesListState(store *notes.Store, items []notes.Note, selectedID stri
 
 	listItems := make([]ui.NoteListItem, 0, len(items))
 	for _, item := range items {
-		folder := folderFromID(item.ID)
+		folder := store.Folder(item.ID)
 		listItems = append(listItems, ui.NoteListItem{
 			ID:           item.ID,
 			Title:        item.Title,
@@ -412,7 +412,7 @@ func buildNotesListState(store *notes.Store, items []notes.Note, selectedID stri
 	editor := ui.NoteEditor{}
 	currentFolder := notes.NormalizeFolder(newFolder)
 	if hasSelected {
-		currentFolder = folderFromID(selected.ID)
+		currentFolder = store.Folder(selected.ID)
 		editor = ui.NoteEditor{
 			ID:           selected.ID,
 			Title:        selected.Title,
@@ -547,20 +547,12 @@ func convertFolderNode(node *folderNode) ui.NoteFolder {
 	}
 }
 
-func folderFromID(id string) string {
-	dir := path.Dir(id)
-	if dir == "." {
-		return ""
-	}
-	return dir
-}
-
-func collectFolders(items []notes.Note) []string {
+func collectFolders(store *notes.Store, items []notes.Note) []string {
 	folders := make(map[string]struct{})
 	folders[""] = struct{}{}
 	for _, item := range items {
-		dir := folderFromID(item.ID)
-		folders[dir] = struct{}{}
+		folder := store.Folder(item.ID)
+		folders[folder] = struct{}{}
 	}
 	values := make([]string, 0, len(folders))
 	for folder := range folders {

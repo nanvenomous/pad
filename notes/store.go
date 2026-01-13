@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	gonanoid "github.com/matoous/go-nanoid/v2"
 )
 
 var (
@@ -89,11 +91,11 @@ func (s *Store) Create(folder, title, body string) (Note, error) {
 
 	now := time.Now().UTC()
 	folder = NormalizeFolder(folder)
-	filename := s.uniqueFilename(slugify(title), folder)
-	id := strings.TrimSuffix(filename, notesFileExtension)
-	if !isValidID(id) {
-		return Note{}, ErrInvalidID
+	id, err := s.newID()
+	if err != nil {
+		return Note{}, err
 	}
+	filename := s.uniqueFilenameForID(slugify(title), folder, id)
 	title = NormalizeTitle(title)
 	note := Note{
 		ID:        id,
@@ -207,7 +209,7 @@ func (s *Store) Move(id, folder string) (Note, string, error) {
 		newFilename = path.Join(folder, base)
 	}
 	if newFilename == filename {
-		return note, id, nil
+		return note, note.ID, nil
 	}
 
 	newFilename = s.uniqueFilenameOnDisk(newFilename, folder)
@@ -220,17 +222,14 @@ func (s *Store) Move(id, folder string) (Note, string, error) {
 		return note, "", err
 	}
 
-	_, err := s.SyncFromFilesystem()
-	if err != nil {
+	s.mu.Lock()
+	s.filenames[note.ID] = newFilename
+	s.mu.Unlock()
+	if err := s.saveMetadata(); err != nil {
 		return note, "", err
 	}
 
-	newID := strings.TrimSuffix(newFilename, notesFileExtension)
-	updated, ok := s.Get(newID)
-	if ok {
-		return updated, newID, nil
-	}
-	return note, newID, nil
+	return note, note.ID, nil
 }
 
 func (s *Store) SyncFromFilesystem() (bool, error) {
@@ -294,14 +293,33 @@ func (s *Store) SyncFromFilesystem() (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	filenameToID := make(map[string]string, len(s.filenames))
+	for id, filename := range s.filenames {
+		filename = s.filenameFromMetadata(id, filename)
+		if filename == "" {
+			continue
+		}
+		filenameToID[filename] = id
+	}
+
 	nextNotes := make(map[string]Note, len(snapshots))
 	nextFilenames := make(map[string]string, len(snapshots))
 	changed := len(s.notes) != len(snapshots)
 
 	for _, snapshot := range snapshots {
-		id := strings.TrimSuffix(snapshot.filename, notesFileExtension)
-		if !isValidID(id) {
-			continue
+		id, ok := filenameToID[snapshot.filename]
+		if !ok {
+			var err error
+			for {
+				id, err = s.newID()
+				if err != nil {
+					return false, err
+				}
+				if _, exists := nextNotes[id]; !exists {
+					break
+				}
+			}
+			changed = true
 		}
 		updatedAt := snapshot.modTime
 		if updatedAt.IsZero() {
@@ -414,23 +432,29 @@ func (s *Store) load() error {
 			if !isValidID(id) {
 				continue
 			}
-			if _, exists := s.notes[id]; exists {
-				continue
+			newID, err := s.newID()
+			if err != nil {
+				return err
 			}
 			body, err := s.loadBodyByFilename(entry.Name())
 			if err != nil {
 				return err
 			}
 			now := time.Now().UTC()
-			s.filenames[id] = entry.Name()
-			s.notes[id] = Note{
-				ID:        id,
+			s.filenames[newID] = entry.Name()
+			s.notes[newID] = Note{
+				ID:        newID,
 				Title:     NormalizeTitleFromBody(body),
 				Body:      body,
 				CreatedAt: now,
 				UpdatedAt: now,
 				Revision:  1,
 				Deleted:   false,
+			}
+		}
+		if len(s.notes) > 0 {
+			if err := s.saveMetadata(); err != nil {
+				return err
 			}
 		}
 	}
@@ -525,10 +549,18 @@ func (s *Store) loadBodyByFilename(filename string) (string, error) {
 }
 
 func (s *Store) saveBody(note Note) error {
-	filename := s.ensureFilename(note)
+	filename, previous := s.ensureFilename(note)
 	path := s.notePath(filename)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
+	}
+	if previous != "" && previous != filename {
+		oldPath := s.notePath(previous)
+		if _, err := os.Stat(oldPath); err == nil {
+			if err := os.Rename(oldPath, path); err != nil {
+				return err
+			}
+		}
 	}
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, []byte(note.Body), 0o644); err != nil {
@@ -551,15 +583,25 @@ func (s *Store) filenameFromMetadata(id, filename string) string {
 	return filename
 }
 
-func (s *Store) ensureFilename(note Note) string {
+func (s *Store) ensureFilename(note Note) (string, string) {
 	current := s.filenameFromMetadata(note.ID, s.filenames[note.ID])
+	folder := ""
+	if current != "" {
+		dir := path.Dir(current)
+		if dir != "." {
+			folder = dir
+		}
+	}
+	filename := s.uniqueFilenameForID(slugify(note.Title), folder, note.ID)
+	filename = s.filenameFromMetadata(note.ID, filename)
 	if current != "" {
 		s.filenames[note.ID] = current
-		return current
+		if current == filename {
+			return current, ""
+		}
 	}
-	filename := s.filenameFromMetadata(note.ID, note.ID)
 	s.filenames[note.ID] = filename
-	return filename
+	return filename, current
 }
 
 func titleFromFile(body, filename string) string {
@@ -574,18 +616,18 @@ func titleFromFile(body, filename string) string {
 	return NormalizeTitle(base)
 }
 
-func (s *Store) uniqueFilename(base, folder string) string {
+func (s *Store) uniqueFilenameForID(base, folder, id string) string {
 	if base == "" {
 		base = "note"
 	}
 	folder = NormalizeFolder(folder)
 	candidate := path.Join(folder, base) + notesFileExtension
-	if s.isFilenameAvailable(candidate, "") {
+	if s.isFilenameAvailable(candidate, id) {
 		return candidate
 	}
 	for i := 2; ; i++ {
 		candidate = path.Join(folder, fmt.Sprintf("%s-%d%s", base, i, notesFileExtension))
-		if s.isFilenameAvailable(candidate, "") {
+		if s.isFilenameAvailable(candidate, id) {
 			return candidate
 		}
 	}
@@ -620,6 +662,37 @@ func (s *Store) isFilenameAvailable(filename, id string) bool {
 		}
 	}
 	return true
+}
+
+func (s *Store) Folder(id string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	filename := s.filenameFromMetadata(id, s.filenames[id])
+	if filename == "" {
+		return ""
+	}
+	dir := path.Dir(filename)
+	if dir == "." {
+		return ""
+	}
+	return dir
+}
+
+func (s *Store) newID() (string, error) {
+	for i := 0; i < 5; i++ {
+		id, err := gonanoid.New()
+		if err != nil {
+			return "", err
+		}
+		if s.notes != nil {
+			if _, ok := s.notes[id]; ok {
+				continue
+			}
+		}
+		return id, nil
+	}
+	return "", errors.New("could not generate unique note id")
 }
 
 func isValidID(id string) bool {
