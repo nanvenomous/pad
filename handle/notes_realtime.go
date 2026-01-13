@@ -82,6 +82,9 @@ func broadcastNotesUpdate() {
 func (h *notesHub) broadcast(store *notes.Store) {
 	clients := h.snapshot()
 	for _, client := range clients {
+		if client.forceNew {
+			continue
+		}
 		payload, err := renderNotesUpdate(client.selectedID, client.forceNew)
 		if err != nil {
 			log.Printf("notes stream render: %v", err)

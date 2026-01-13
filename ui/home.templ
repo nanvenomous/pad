@@ -249,12 +249,7 @@ templ NotesMain(props PropsNotesMain, swapOOB bool) {
 			hx-swap-oob="true"
 		}
 	>
-		<div
-			id="notesStream"
-			class="hidden"
-			hx-ext="ws"
-			ws-connect={ "/notes/stream?id=" + url.QueryEscape(props.Editor.ID) + "&new=" + strconv.FormatBool(props.ForceNew) }
-		></div>
+		@NotesStream(props, false)
 		<div class="drawer h-full lg:drawer-open">
 			<input id="notesDrawer" type="checkbox" class="drawer-toggle"/>
 			<div class="drawer-content flex h-full w-full flex-col gap-3 overflow-hidden">
@@ -306,8 +301,21 @@ templ NotesMain(props PropsNotesMain, swapOOB bool) {
 	</section>
 }
 
+templ NotesStream(props PropsNotesMain, swapOOB bool) {
+	<div
+		id="notesStream"
+		class="hidden"
+		hx-ext="ws"
+		ws-connect={ "/notes/stream?id=" + url.QueryEscape(props.Editor.ID) + "&new=" + strconv.FormatBool(props.ForceNew) }
+		if swapOOB {
+			hx-swap-oob="outerHTML"
+		}
+	></div>
+}
+
 templ NotesAutosaveResponse(props PropsNotesMain) {
 	@NotesSidebar(props, true)
 	@NotesEditorHeader(props, true)
 	@NotesEditorMeta(props, true)
+	@NotesStream(props, true)
 }
