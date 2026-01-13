@@ -84,6 +84,7 @@ templ NotesSidebar(props PropsNotesMain, swapOOB bool) {
 				hx-get={ "/notes/new?folder=" + url.QueryEscape(props.CurrentFolder) }
 				hx-target="#notesMain"
 				hx-swap="outerHTML"
+				hx-push-url="/"
 			>
 				@icon("", "ph-plus-circle text-base")
 				New
@@ -139,6 +140,7 @@ templ NotesFolder(folder NoteFolder) {
 					hx-get={ "/notes/select?id=" + url.QueryEscape(item.ID) }
 					hx-target="#notesMain"
 					hx-swap="outerHTML"
+					hx-push-url={ "/?id=" + url.QueryEscape(item.ID) }
 				>
 					<div class="flex items-start justify-between gap-2">
 						<div class="font-semibold leading-tight">{ item.Title }</div>

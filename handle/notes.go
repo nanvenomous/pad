@@ -2,6 +2,7 @@ package handle
 
 import (
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"sort"
@@ -155,6 +156,9 @@ func NotesSaveHandler(w http.ResponseWriter, r *http.Request) {
 	selectedID := note.ID
 	if saveErr == notes.ErrNotFound {
 		selectedID = ""
+	}
+	if saveErr == nil && note.ID != "" {
+		w.Header().Set("HX-Push-Url", "/?id="+url.QueryEscape(note.ID))
 	}
 
 	mainProps, err := buildNotesMainProps(selectedID, false, "")
