@@ -4,6 +4,7 @@ import { dismissAlert } from './alert'
 import { dialogEventHandler } from "./dialog";
 import { applySavedTheme, persistTheme, updateThemeDisplay } from './theme'
 import { initNoteEditors } from "./note_editor";
+import { initNoteActions, initNoteList } from "./note_list";
 import { initUpdatedLabels } from "./updated_time";
 
 const w = window as any;
@@ -20,6 +21,8 @@ w.updateThemeDisplay = updateThemeDisplay
 
 const initEditorsOnce = () => {
   initNoteEditors(document);
+  initNoteActions(document);
+  initNoteList(document);
   initUpdatedLabels(document);
 };
 if (document.readyState === "loading") {
@@ -29,5 +32,7 @@ if (document.readyState === "loading") {
 }
 htmx.onLoad((root) => {
   initNoteEditors(root);
+  initNoteActions(root);
+  initNoteList(root);
   initUpdatedLabels(root);
 });

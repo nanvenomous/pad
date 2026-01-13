@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -104,12 +105,13 @@ func (s *Store) Get(id string) (Note, bool) {
 	return note, ok
 }
 
-func (s *Store) Create(title, body string) (Note, error) {
+func (s *Store) Create(folder, title, body string) (Note, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	now := time.Now().UTC()
-	filename := s.uniqueFilename(slugify(title), "")
+	folder = normalizeFolder(folder)
+	filename := s.uniqueFilename(slugify(title), folder)
 	id := strings.TrimSuffix(filename, notesFileExtension)
 	if !isValidID(id) {
 		return Note{}, ErrInvalidID
@@ -248,9 +250,63 @@ func (s *Store) Delete(id string, expectedRevision int) (Note, error) {
 	return note, err
 }
 
-func (s *Store) SyncFromFilesystem() (bool, error) {
-	entries, err := os.ReadDir(s.dir)
+func (s *Store) Move(id, folder string) (Note, string, error) {
+	if id == "" {
+		return Note{}, "", ErrInvalidID
+	}
+	if !isValidID(id) {
+		return Note{}, "", ErrInvalidID
+	}
+
+	folder = normalizeFolder(folder)
+
+	s.mu.Lock()
+	note, ok := s.notes[id]
+	if !ok {
+		s.mu.Unlock()
+		return Note{}, "", ErrNotFound
+	}
+	filename := s.filenameFromMetadata(note.ID, s.filenames[note.ID])
+	s.mu.Unlock()
+
+	if filename == "" {
+		return note, "", ErrNotFound
+	}
+
+	base := path.Base(filename)
+	newFilename := base
+	if folder != "" {
+		newFilename = path.Join(folder, base)
+	}
+	if newFilename == filename {
+		return note, id, nil
+	}
+
+	newFilename = s.uniqueFilenameOnDisk(newFilename, folder)
+	oldPath := s.notePath(filename)
+	newPath := s.notePath(newFilename)
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
+		return note, "", err
+	}
+	if err := os.Rename(oldPath, newPath); err != nil {
+		return note, "", err
+	}
+
+	_, err := s.SyncFromFilesystem()
 	if err != nil {
+		return note, "", err
+	}
+
+	newID := strings.TrimSuffix(newFilename, notesFileExtension)
+	updated, ok := s.Get(newID)
+	if ok {
+		return updated, newID, nil
+	}
+	return note, newID, nil
+}
+
+func (s *Store) SyncFromFilesystem() (bool, error) {
+	if _, err := os.Stat(s.dir); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
 		}
@@ -263,27 +319,48 @@ func (s *Store) SyncFromFilesystem() (bool, error) {
 		modTime  time.Time
 	}
 
-	snapshots := make([]fileSnapshot, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
+	snapshots := make([]fileSnapshot, 0)
+	err := filepath.WalkDir(s.dir, func(entryPath string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			if errors.Is(walkErr, os.ErrNotExist) {
+				return nil
+			}
+			return walkErr
 		}
-		if filepath.Ext(entry.Name()) != notesFileExtension {
-			continue
+		if d.IsDir() {
+			return nil
 		}
-		info, err := entry.Info()
+		if filepath.Ext(d.Name()) != notesFileExtension {
+			return nil
+		}
+		if d.Name() == notesMetadataFilename {
+			return nil
+		}
+		rel, err := filepath.Rel(s.dir, entryPath)
 		if err != nil {
-			return false, err
+			return err
 		}
-		body, err := s.loadBodyByFilename(entry.Name())
+		rel = filepath.ToSlash(rel)
+		if !isValidID(strings.TrimSuffix(rel, notesFileExtension)) {
+			return nil
+		}
+		info, err := d.Info()
 		if err != nil {
-			return false, err
+			return err
+		}
+		body, err := s.loadBodyByFilename(rel)
+		if err != nil {
+			return err
 		}
 		snapshots = append(snapshots, fileSnapshot{
-			filename: entry.Name(),
+			filename: rel,
 			body:     body,
 			modTime:  info.ModTime().UTC(),
 		})
+		return nil
+	})
+	if err != nil {
+		return false, err
 	}
 
 	s.mu.Lock()
@@ -526,6 +603,9 @@ func (s *Store) loadBodyByFilename(filename string) (string, error) {
 func (s *Store) saveBody(note Note, lockFilename bool) error {
 	filename := s.ensureFilename(note, lockFilename)
 	path := s.notePath(filename)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, []byte(note.Body), 0o644); err != nil {
 		return err
@@ -534,7 +614,7 @@ func (s *Store) saveBody(note Note, lockFilename bool) error {
 }
 
 func (s *Store) notePath(filename string) string {
-	return filepath.Join(s.dir, filename)
+	return filepath.Join(s.dir, filepath.FromSlash(filename))
 }
 
 func (s *Store) filenameFromMetadata(id, filename string) string {
@@ -563,25 +643,48 @@ func titleFromFile(body, filename string) string {
 	if title != defaultTitle {
 		return title
 	}
-	base := strings.TrimSuffix(filename, notesFileExtension)
+	base := path.Base(strings.TrimSuffix(filename, notesFileExtension))
 	if base == "" {
 		return title
 	}
 	return NormalizeTitle(base)
 }
 
-func (s *Store) uniqueFilename(base, id string) string {
+func (s *Store) uniqueFilename(base, folder string) string {
 	if base == "" {
 		base = "note"
 	}
-	candidate := base + notesFileExtension
-	if s.isFilenameAvailable(candidate, id) {
+	folder = normalizeFolder(folder)
+	candidate := path.Join(folder, base) + notesFileExtension
+	if s.isFilenameAvailable(candidate, "") {
 		return candidate
 	}
 	for i := 2; ; i++ {
-		candidate = fmt.Sprintf("%s-%d%s", base, i, notesFileExtension)
-		if s.isFilenameAvailable(candidate, id) {
+		candidate = path.Join(folder, fmt.Sprintf("%s-%d%s", base, i, notesFileExtension))
+		if s.isFilenameAvailable(candidate, "") {
 			return candidate
+		}
+	}
+}
+
+func (s *Store) uniqueFilenameOnDisk(filename, folder string) string {
+	if _, err := os.Stat(s.notePath(filename)); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return filename
+		}
+	}
+
+	base := path.Base(strings.TrimSuffix(filename, notesFileExtension))
+	if base == "" {
+		base = "note"
+	}
+	folder = normalizeFolder(folder)
+	for i := 2; ; i++ {
+		candidate := path.Join(folder, fmt.Sprintf("%s-%d%s", base, i, notesFileExtension))
+		if _, err := os.Stat(s.notePath(candidate)); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return candidate
+			}
 		}
 	}
 }
@@ -599,10 +702,35 @@ func isValidID(id string) bool {
 	if id == "" {
 		return false
 	}
-	if strings.Contains(id, "/") || strings.Contains(id, "\\") {
+	if strings.Contains(id, "\\") {
 		return false
 	}
+	if strings.HasPrefix(id, "/") {
+		return false
+	}
+	clean := path.Clean(id)
+	if clean != id {
+		return false
+	}
+	parts := strings.Split(id, "/")
+	for _, part := range parts {
+		if part == "" || part == "." || part == ".." {
+			return false
+		}
+	}
 	return true
+}
+
+func normalizeFolder(folder string) string {
+	folder = strings.TrimSpace(folder)
+	folder = strings.Trim(folder, "/")
+	if folder == "" || folder == "." {
+		return ""
+	}
+	if !isValidID(folder) {
+		return ""
+	}
+	return folder
 }
 
 func slugify(value string) string {

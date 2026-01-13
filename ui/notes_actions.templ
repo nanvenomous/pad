@@ -1,0 +1,78 @@
+package ui
+
+
+
+type PropsNoteActions struct {
+	ID       string
+	Title    string
+	Folder   string
+	Revision int
+	Folders  []string
+}
+
+templ NoteMoveModal(props PropsNoteActions) {
+	@modal(propsModal{CSS: "max-w-md"}) {
+		<div class="flex flex-col gap-4">
+			<div class="flex items-center justify-between">
+				<div>
+					<h3 class="text-lg font-semibold text-base-content">Move note</h3>
+					<p class="text-xs uppercase tracking-[0.2em] text-base-content/50">
+						{ props.Title }
+					</p>
+				</div>
+				<button
+					class="btn btn-sm btn-circle btn-ghost"
+					hx-delete="/modal"
+					hx-target="#modal"
+					hx-swap="outerHTML"
+					aria-label="Close modal"
+				>
+					@icon("", "ph-x text-lg")
+				</button>
+			</div>
+			<form
+				class="space-y-3"
+				hx-post="/notes/move"
+				hx-target="#notesMain"
+				hx-swap="outerHTML"
+			>
+				<input type="hidden" name="id" value={ props.ID }/>
+				<label class="form-control">
+					<div class="label">
+						<span class="label-text text-xs uppercase tracking-[0.2em] text-base-content/50">Move to folder</span>
+					</div>
+					<select class="select select-bordered w-full" name="folder">
+						for _, folder := range props.Folders {
+							<option
+								value={ folder }
+								if folder == props.Folder {
+									selected
+								}
+							>
+								if folder == "" {
+									Root
+								} else {
+									{ folder }
+								}
+							</option>
+						}
+					</select>
+				</label>
+				<div class="flex justify-end gap-2">
+					<button
+						class="btn btn-ghost"
+						type="button"
+						hx-delete="/modal"
+						hx-target="#modal"
+						hx-swap="outerHTML"
+					>
+						Cancel
+					</button>
+					<button class="btn btn-primary" type="submit">
+						Move
+					</button>
+				</div>
+			</form>
+		</div>
+	}
+}

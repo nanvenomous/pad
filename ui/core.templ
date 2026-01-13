@@ -72,10 +72,53 @@ templ popovers() {
 		id="toastContainer"
 		class="fixed top-0 left-0 right-0 flex flex-col justify-start items-center z-50 pointer-events-none"
 	></div>
+	@ActionsMenuPopover()
 	<div class="fixed top-0 left-0 right-0 z-40 pointer-events-none">
 		@progress()
 	</div>
 	@EmptyModalPopover(PropsEmptyModalPopover{})
+}
+
+templ ActionsMenuPopover() {
+	<details id="actionsMenu" class="dropdown fixed z-50 hidden">
+		<summary class="h-0 w-0 overflow-hidden p-0 m-0 pointer-events-none opacity-0">
+			Actions
+		</summary>
+		<ul class="menu dropdown-content z-[1] w-56 rounded-2xl border border-base-200/70 bg-base-100/95 p-2 shadow-lg backdrop-blur text-sm">
+			<li class="menu-title text-xs uppercase tracking-[0.2em] text-base-content/50">
+				<span data-actions-title></span>
+			</li>
+			<li>
+				<button
+					type="button"
+					class="justify-start"
+					data-actions-move
+					data-actions-close
+					hx-target="#modal"
+					hx-swap="outerHTML"
+				>
+					@icon("", "ph-folder text-base")
+					Move
+				</button>
+			</li>
+			<li>
+				<form
+					data-actions-delete-form
+					data-actions-close
+					hx-post="/notes/delete"
+					hx-target="#notesMain"
+					hx-swap="outerHTML"
+				>
+					<input type="hidden" name="id" data-actions-id/>
+					<input type="hidden" name="revision" data-actions-revision/>
+					<button class="text-error justify-start" type="submit">
+						@icon("", "ph-trash text-base")
+						Delete
+					</button>
+				</form>
+			</li>
+		</ul>
+	</details>
 }
 
 templ Page() {

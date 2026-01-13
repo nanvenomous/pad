@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -106,7 +107,7 @@ func (h *notesHub) safeSend(client *notesStreamClient, payload []byte) {
 }
 
 func renderNotesUpdate(selectedID string, forceNew bool) ([]byte, error) {
-	props, err := buildNotesMainProps(selectedID, forceNew)
+	props, err := buildNotesMainProps(selectedID, forceNew, "")
 	if err != nil {
 		return nil, err
 	}
@@ -179,8 +180,32 @@ func startNotesWatcher(store *notes.Store, dir string) {
 		log.Printf("notes watcher init: %v", err)
 		return
 	}
+	watched := make(map[string]struct{})
 
-	if err := watcher.Add(dir); err != nil {
+	addWatch := func(path string) {
+		if _, ok := watched[path]; ok {
+			return
+		}
+		if err := watcher.Add(path); err != nil {
+			log.Printf("notes watcher add: %v", err)
+			return
+		}
+		watched[path] = struct{}{}
+	}
+
+	err = filepath.WalkDir(dir, func(entryPath string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			if os.IsNotExist(walkErr) {
+				return nil
+			}
+			return walkErr
+		}
+		if d.IsDir() {
+			addWatch(entryPath)
+		}
+		return nil
+	})
+	if err != nil {
 		_ = watcher.Close()
 		log.Printf("notes watcher add: %v", err)
 		return
@@ -201,6 +226,11 @@ func startNotesWatcher(store *notes.Store, dir string) {
 				}
 				if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) == 0 {
 					continue
+				}
+				if event.Op&fsnotify.Create != 0 {
+					if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
+						addWatch(event.Name)
+					}
 				}
 				pending = true
 				if !timer.Stop() {
