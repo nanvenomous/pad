@@ -1,7 +1,7 @@
 import htmx from "htmx.org";
 import "htmx-ext-ws";
 import { dismissAlert } from './alert'
-import { dialogEventHandler } from "./dialog";
+import { dialogClose, dialogEventHandler } from "./dialog";
 import { applySavedTheme, persistTheme, updateThemeDisplay } from './theme'
 import { initNoteEditors } from "./note_editor";
 import { initNoteActions, initNoteList } from "./note_list";
@@ -15,6 +15,7 @@ if (!(globalThis as any).htmx) {
 
 w.dismissAlert = dismissAlert
 w.dialogEventHandler = dialogEventHandler
+w.dialogClose = dialogClose
 w.applySavedTheme = applySavedTheme
 w.persistTheme = persistTheme
 w.updateThemeDisplay = updateThemeDisplay

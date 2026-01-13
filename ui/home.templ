@@ -130,8 +130,11 @@ templ NotesFolder(folder NoteFolder) {
 				<button
 					class={
 						"w-full select-none touch-manipulation rounded-xl border border-base-200/60 bg-base-100/70 px-3 py-2.5 text-left text-sm transition",
-						templ.KV("border-accent/70 bg-accent/10 shadow-md", item.Selected),
+						templ.KV("border-accent/80 bg-accent/15 shadow-lg ring-2 ring-accent/30", item.Selected),
 						templ.KV("hover:border-accent/50", !item.Selected),
+					}
+					if item.Selected {
+						aria-current="page"
 					}
 					data-note-item
 					data-note-id={ item.ID }
