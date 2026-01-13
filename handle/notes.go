@@ -113,7 +113,7 @@ func NotesSaveHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	time.Sleep(250 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
 
 	id := strings.TrimSpace(r.FormValue("id"))
 	body := r.FormValue("body")
@@ -352,6 +352,28 @@ func buildNotesMainProps(selectedID string, forceNew bool, newFolder string) (ui
 	}
 
 	items := store.List(false)
+	state := buildNotesListState(store, items, selectedID, forceNew, newFolder)
+	folders := buildFolderTree(state.listItems)
+
+	return ui.PropsNotesMain{
+		Folders:       folders,
+		Items:         state.listItems,
+		Editor:        state.editor,
+		HasSelection:  state.hasSelected,
+		ForceNew:      forceNew,
+		NotesCount:    len(state.listItems),
+		CurrentFolder: state.currentFolder,
+	}, nil
+}
+
+type notesListState struct {
+	listItems     []ui.NoteListItem
+	editor        ui.NoteEditor
+	hasSelected   bool
+	currentFolder string
+}
+
+func buildNotesListState(store *notes.Store, items []notes.Note, selectedID string, forceNew bool, newFolder string) notesListState {
 	var selected notes.Note
 	hasSelected := false
 
@@ -371,14 +393,11 @@ func buildNotesMainProps(selectedID string, forceNew bool, newFolder string) (ui
 
 	listItems := make([]ui.NoteListItem, 0, len(items))
 	for _, item := range items {
-		folder := path.Dir(item.ID)
-		if folder == "." {
-			folder = ""
-		}
+		folder := folderFromID(item.ID)
 		listItems = append(listItems, ui.NoteListItem{
 			ID:           item.ID,
 			Title:        item.Title,
-			UpdatedLabel: humanizeUpdated(item.UpdatedAt),
+			UpdatedLabel: "",
 			UpdatedAt:    formatUpdatedAt(item.UpdatedAt),
 			Selected:     hasSelected && item.ID == selected.ID,
 			Folder:       folder,
@@ -387,34 +406,26 @@ func buildNotesMainProps(selectedID string, forceNew bool, newFolder string) (ui
 	}
 
 	editor := ui.NoteEditor{}
-	currentFolder := normalizeFolder(newFolder)
+	currentFolder := notes.NormalizeFolder(newFolder)
 	if hasSelected {
-		currentFolder = path.Dir(selected.ID)
-		if currentFolder == "." {
-			currentFolder = ""
-		}
+		currentFolder = folderFromID(selected.ID)
 		editor = ui.NoteEditor{
 			ID:           selected.ID,
 			Title:        selected.Title,
 			Body:         selected.Body,
 			Revision:     selected.Revision,
-			UpdatedLabel: humanizeUpdated(selected.UpdatedAt),
+			UpdatedLabel: "",
 			UpdatedAt:    formatUpdatedAt(selected.UpdatedAt),
 			Folder:       currentFolder,
 		}
 	}
 
-	folders := buildFolderTree(listItems)
-
-	return ui.PropsNotesMain{
-		Folders:       folders,
-		Items:         listItems,
-		Editor:        editor,
-		HasSelection:  hasSelected,
-		ForceNew:      forceNew,
-		NotesCount:    len(listItems),
-		CurrentFolder: currentFolder,
-	}, nil
+	return notesListState{
+		listItems:     listItems,
+		editor:        editor,
+		hasSelected:   hasSelected,
+		currentFolder: currentFolder,
+	}
 }
 
 type folderNode struct {
@@ -532,22 +543,6 @@ func convertFolderNode(node *folderNode) ui.NoteFolder {
 	}
 }
 
-func normalizeFolder(folder string) string {
-	folder = strings.TrimSpace(folder)
-	folder = strings.Trim(folder, "/")
-	if folder == "" || folder == "." {
-		return ""
-	}
-	clean := path.Clean(folder)
-	if clean != folder {
-		return ""
-	}
-	if strings.HasPrefix(folder, "/") || strings.HasPrefix(folder, "../") {
-		return ""
-	}
-	return folder
-}
-
 func folderFromID(id string) string {
 	dir := path.Dir(id)
 	if dir == "." {
@@ -571,26 +566,6 @@ func collectFolders(items []notes.Note) []string {
 		return values[i] < values[j]
 	})
 	return values
-}
-
-func humanizeUpdated(updated time.Time) string {
-	if updated.IsZero() {
-		return "never"
-	}
-
-	diff := time.Since(updated)
-	switch {
-	case diff < time.Minute:
-		return "just now"
-	case diff < time.Hour:
-		return strconv.Itoa(int(diff.Minutes())) + "m ago"
-	case diff < 24*time.Hour:
-		return strconv.Itoa(int(diff.Hours())) + "h ago"
-	case diff < 7*24*time.Hour:
-		return strconv.Itoa(int(diff.Hours()/24)) + "d ago"
-	default:
-		return updated.Format("Jan 2, 2006")
-	}
 }
 
 func formatUpdatedAt(updated time.Time) string {

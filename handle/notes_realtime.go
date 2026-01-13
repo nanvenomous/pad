@@ -18,8 +18,6 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-const notesFileExtension = ".md"
-
 type notesStreamClient struct {
 	ch         chan []byte
 	selectedID string

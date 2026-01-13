@@ -45,10 +45,6 @@ type PropsNotesMain struct {
 	CurrentFolder string
 }
 
-templ Home() {
-	@NotesPage(PropsNotesMain{})
-}
-
 templ NotesPage(props PropsNotesMain) {
 	@Page() {
 		<div class="flex h-full w-full flex-col gap-3 overflow-hidden px-3 pb-4 pt-4 sm:px-4 lg:px-6">

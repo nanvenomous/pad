@@ -11,17 +11,6 @@ func init() {
 
 		mux.HandleFunc("/modal", func(w http.ResponseWriter, r *http.Request) {
 			switch r.Method {
-			case http.MethodGet:
-				ModalHandler(w, r)
-				return
-			case http.MethodPut:
-				stts, err := render(w, r,
-					ui.ExampleModal(),
-				)
-				if err != nil {
-					errorHTTP(w, stts, err)
-				}
-				return
 			case http.MethodDelete:
 				stts, err := render(w, r,
 					ui.EmptyModalPopover(ui.PropsEmptyModalPopover{}),
@@ -30,17 +19,11 @@ func init() {
 					errorHTTP(w, stts, err)
 				}
 				return
+			default:
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				return
 			}
 		})
 
 	})
-}
-
-func ModalHandler(w http.ResponseWriter, r *http.Request) {
-	stts, err := render(w, r,
-		ui.PageModal(),
-	)
-	if err != nil {
-		errorHTTP(w, stts, err)
-	}
 }

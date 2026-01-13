@@ -75,28 +75,6 @@ func (s *Store) List(includeDeleted bool) []Note {
 	return items
 }
 
-func (s *Store) Since(since time.Time, includeDeleted bool) []Note {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	items := make([]Note, 0)
-	for _, note := range s.notes {
-		if note.UpdatedAt.Before(since) {
-			continue
-		}
-		if note.Deleted && !includeDeleted {
-			continue
-		}
-		items = append(items, note)
-	}
-
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].UpdatedAt.After(items[j].UpdatedAt)
-	})
-
-	return items
-}
-
 func (s *Store) Get(id string) (Note, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -110,7 +88,7 @@ func (s *Store) Create(folder, title, body string) (Note, error) {
 	defer s.mu.Unlock()
 
 	now := time.Now().UTC()
-	folder = normalizeFolder(folder)
+	folder = NormalizeFolder(folder)
 	filename := s.uniqueFilename(slugify(title), folder)
 	id := strings.TrimSuffix(filename, notesFileExtension)
 	if !isValidID(id) {
@@ -163,56 +141,6 @@ func (s *Store) Update(id, title, body string, expectedRevision int) (Note, erro
 	return note, s.save(note)
 }
 
-func (s *Store) Upsert(id, title, body string, expectedRevision int, allowCreate bool) (Note, error) {
-	if id == "" {
-		return Note{}, ErrInvalidID
-	}
-	if !isValidID(id) {
-		return Note{}, ErrInvalidID
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	note, ok := s.notes[id]
-	if !ok {
-		if !allowCreate {
-			return Note{}, ErrNotFound
-		}
-
-		now := time.Now().UTC()
-		revision := 1
-		if expectedRevision > 0 {
-			revision = expectedRevision
-		}
-
-		note = Note{
-			ID:        id,
-			Title:     NormalizeTitle(title),
-			Body:      body,
-			CreatedAt: now,
-			UpdatedAt: now,
-			Revision:  revision,
-			Deleted:   false,
-		}
-		s.notes[id] = note
-		return note, s.save(note)
-	}
-
-	if expectedRevision > 0 && expectedRevision != note.Revision {
-		return note, ErrConflict
-	}
-
-	note.Title = NormalizeTitle(title)
-	note.Body = body
-	note.UpdatedAt = time.Now().UTC()
-	note.Revision++
-	note.Deleted = false
-	s.notes[id] = note
-
-	return note, s.save(note)
-}
-
 func (s *Store) Delete(id string, expectedRevision int) (Note, error) {
 	if id == "" {
 		return Note{}, ErrInvalidID
@@ -258,7 +186,7 @@ func (s *Store) Move(id, folder string) (Note, string, error) {
 		return Note{}, "", ErrInvalidID
 	}
 
-	folder = normalizeFolder(folder)
+	folder = NormalizeFolder(folder)
 
 	s.mu.Lock()
 	note, ok := s.notes[id]
@@ -511,15 +439,11 @@ func (s *Store) load() error {
 }
 
 func (s *Store) save(note Note) error {
-	return s.saveWithFilename(note, false)
-}
-
-func (s *Store) saveWithFilename(note Note, lockFilename bool) error {
 	if err := os.MkdirAll(s.dir, 0o755); err != nil {
 		return err
 	}
 
-	if err := s.saveBody(note, lockFilename); err != nil {
+	if err := s.saveBody(note); err != nil {
 		return err
 	}
 
@@ -600,8 +524,8 @@ func (s *Store) loadBodyByFilename(filename string) (string, error) {
 	return string(data), nil
 }
 
-func (s *Store) saveBody(note Note, lockFilename bool) error {
-	filename := s.ensureFilename(note, lockFilename)
+func (s *Store) saveBody(note Note) error {
+	filename := s.ensureFilename(note)
 	path := s.notePath(filename)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -627,7 +551,7 @@ func (s *Store) filenameFromMetadata(id, filename string) string {
 	return filename
 }
 
-func (s *Store) ensureFilename(note Note, lockFilename bool) string {
+func (s *Store) ensureFilename(note Note) string {
 	current := s.filenameFromMetadata(note.ID, s.filenames[note.ID])
 	if current != "" {
 		s.filenames[note.ID] = current
@@ -654,7 +578,7 @@ func (s *Store) uniqueFilename(base, folder string) string {
 	if base == "" {
 		base = "note"
 	}
-	folder = normalizeFolder(folder)
+	folder = NormalizeFolder(folder)
 	candidate := path.Join(folder, base) + notesFileExtension
 	if s.isFilenameAvailable(candidate, "") {
 		return candidate
@@ -678,7 +602,7 @@ func (s *Store) uniqueFilenameOnDisk(filename, folder string) string {
 	if base == "" {
 		base = "note"
 	}
-	folder = normalizeFolder(folder)
+	folder = NormalizeFolder(folder)
 	for i := 2; ; i++ {
 		candidate := path.Join(folder, fmt.Sprintf("%s-%d%s", base, i, notesFileExtension))
 		if _, err := os.Stat(s.notePath(candidate)); err != nil {
@@ -721,7 +645,7 @@ func isValidID(id string) bool {
 	return true
 }
 
-func normalizeFolder(folder string) string {
+func NormalizeFolder(folder string) string {
 	folder = strings.TrimSpace(folder)
 	folder = strings.Trim(folder, "/")
 	if folder == "" || folder == "." {
