@@ -1,12 +1,14 @@
 package handle
 
 import (
+	"bufio"
 	"bytes"
 	"embed"
 	"fmt"
 	"io"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"slices"
 	"strings"
@@ -80,6 +82,22 @@ type responseWriter struct {
 	http.ResponseWriter
 	statusCode    int
 	headerWritten bool
+}
+
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := rw.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("response writer does not support hijacking")
+	}
+	return hijacker.Hijack()
+}
+
+func (rw *responseWriter) Flush() {
+	flusher, ok := rw.ResponseWriter.(http.Flusher)
+	if !ok {
+		return
+	}
+	flusher.Flush()
 }
 
 func (rw *responseWriter) WriteHeader(code int) {

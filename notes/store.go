@@ -237,6 +237,69 @@ func (s *Store) Delete(id string, expectedRevision int) (Note, error) {
 	return note, s.save(note)
 }
 
+func (s *Store) UpdateFromFile(filename string) (Note, bool, error) {
+	if filepath.Ext(filename) != notesFileExtension {
+		return Note{}, false, nil
+	}
+
+	if _, err := os.Stat(s.notePath(filename)); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return Note{}, false, nil
+		}
+		return Note{}, false, err
+	}
+
+	body, err := s.loadBodyByFilename(filename)
+	if err != nil {
+		return Note{}, false, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	id := s.idForFilename(filename)
+	if id == "" {
+		id = strings.TrimSuffix(filename, notesFileExtension)
+		if !isValidID(id) {
+			return Note{}, false, nil
+		}
+	}
+
+	note, ok := s.notes[id]
+	if !ok {
+		if !s.isFilenameAvailable(filename, id) {
+			return Note{}, false, nil
+		}
+		now := time.Now().UTC()
+		title := titleFromFile(body, filename)
+		note = Note{
+			ID:        id,
+			Title:     title,
+			Body:      body,
+			CreatedAt: now,
+			UpdatedAt: now,
+			Revision:  1,
+			Deleted:   false,
+		}
+		s.notes[id] = note
+		s.filenames[id] = filename
+		return note, true, s.saveWithFilename(note, true)
+	}
+
+	if note.Body == body && !note.Deleted {
+		return note, false, nil
+	}
+
+	note.Body = body
+	note.Title = titleFromFile(body, filename)
+	note.UpdatedAt = time.Now().UTC()
+	note.Revision++
+	note.Deleted = false
+	s.notes[id] = note
+
+	return note, true, s.save(note)
+}
+
 func (s *Store) load() error {
 	if s.dir == "" {
 		return errors.New("notes store directory cannot be empty")
@@ -319,11 +382,15 @@ func (s *Store) load() error {
 }
 
 func (s *Store) save(note Note) error {
+	return s.saveWithFilename(note, false)
+}
+
+func (s *Store) saveWithFilename(note Note, lockFilename bool) error {
 	if err := os.MkdirAll(s.dir, 0o755); err != nil {
 		return err
 	}
 
-	if err := s.saveBody(note); err != nil {
+	if err := s.saveBody(note, lockFilename); err != nil {
 		return err
 	}
 
@@ -400,8 +467,8 @@ func (s *Store) loadBodyByFilename(filename string) (string, error) {
 	return string(data), nil
 }
 
-func (s *Store) saveBody(note Note) error {
-	filename := s.ensureFilename(note)
+func (s *Store) saveBody(note Note, lockFilename bool) error {
+	filename := s.ensureFilename(note, lockFilename)
 	path := s.notePath(filename)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, []byte(note.Body), 0o644); err != nil {
@@ -424,8 +491,12 @@ func (s *Store) filenameFromMetadata(id, filename string) string {
 	return filename
 }
 
-func (s *Store) ensureFilename(note Note) string {
+func (s *Store) ensureFilename(note Note, lockFilename bool) string {
 	current := s.filenameFromMetadata(note.ID, s.filenames[note.ID])
+	if lockFilename && current != "" {
+		s.filenames[note.ID] = current
+		return current
+	}
 	desired := s.uniqueFilename(slugify(note.Title), note.ID)
 	if current != desired {
 		oldPath := s.notePath(current)
@@ -440,6 +511,27 @@ func (s *Store) ensureFilename(note Note) string {
 	}
 	s.filenames[note.ID] = current
 	return current
+}
+
+func (s *Store) idForFilename(filename string) string {
+	for id, existing := range s.filenames {
+		if existing == filename {
+			return id
+		}
+	}
+	return ""
+}
+
+func titleFromFile(body, filename string) string {
+	title := NormalizeTitleFromBody(body)
+	if title != defaultTitle {
+		return title
+	}
+	base := strings.TrimSuffix(filename, notesFileExtension)
+	if base == "" {
+		return title
+	}
+	return NormalizeTitle(base)
 }
 
 func (s *Store) uniqueFilename(base, id string) string {

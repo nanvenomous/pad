@@ -28,6 +28,9 @@ func getNotesStore() (*notes.Store, error) {
 			dir = defaultNotesDir
 		}
 		notesStore, notesStoreErr = notes.NewStore(dir)
+		if notesStoreErr == nil {
+			initNotesRealtime(notesStore, dir)
+		}
 	})
 	return notesStore, notesStoreErr
 }
@@ -46,6 +49,7 @@ func init() {
 		mux.HandleFunc("/notes/new", NotesNewHandler)
 		mux.HandleFunc("/notes/save", NotesSaveHandler)
 		mux.HandleFunc("/notes/delete", NotesDeleteHandler)
+		mux.HandleFunc("/notes/stream", NotesStreamHandler)
 	})
 }
 
@@ -113,6 +117,7 @@ func NotesSaveHandler(w http.ResponseWriter, r *http.Request) {
 
 	title := notes.NormalizeTitleFromBody(body)
 
+	didSave := false
 	var note notes.Note
 	if id == "" {
 		note, err = store.Create(title, body)
@@ -120,11 +125,15 @@ func NotesSaveHandler(w http.ResponseWriter, r *http.Request) {
 			errorHTTP(w, http.StatusInternalServerError, err)
 			return
 		}
+		didSave = true
 	} else {
 		note, err = store.Update(id, title, body, revision)
 		if err != nil && err != notes.ErrConflict && err != notes.ErrNotFound {
 			errorHTTP(w, http.StatusInternalServerError, err)
 			return
+		}
+		if err == nil {
+			didSave = true
 		}
 		if err == notes.ErrConflict {
 			w.WriteHeader(http.StatusConflict)
@@ -132,6 +141,9 @@ func NotesSaveHandler(w http.ResponseWriter, r *http.Request) {
 		if err == notes.ErrNotFound {
 			w.WriteHeader(http.StatusNotFound)
 		}
+	}
+	if didSave {
+		broadcastNotesUpdate()
 	}
 
 	saveErr := err
@@ -199,6 +211,9 @@ func NotesDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil && err != notes.ErrConflict && err != notes.ErrNotFound {
 		errorHTTP(w, http.StatusInternalServerError, err)
 		return
+	}
+	if err == nil {
+		broadcastNotesUpdate()
 	}
 	if err == notes.ErrConflict {
 		w.WriteHeader(http.StatusConflict)
@@ -284,6 +299,7 @@ func buildNotesMainProps(selectedID string, forceNew bool) (ui.PropsNotesMain, e
 		Items:        listItems,
 		Editor:       editor,
 		HasSelection: hasSelected,
+		ForceNew:     forceNew,
 	}, nil
 }
 

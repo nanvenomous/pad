@@ -1,6 +1,9 @@
 package ui
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 type NoteListItem struct {
 	ID           string
@@ -23,6 +26,7 @@ type PropsNotesMain struct {
 	Items        []NoteListItem
 	Editor       NoteEditor
 	HasSelection bool
+	ForceNew     bool
 }
 
 templ Home() {
@@ -205,6 +209,12 @@ templ NotesMain(props PropsNotesMain, swapOOB bool) {
 			hx-swap-oob="true"
 		}
 	>
+		<div
+			id="notesStream"
+			class="hidden"
+			hx-ext="ws"
+			ws-connect={ "/notes/stream?id=" + props.Editor.ID + "&new=" + strconv.FormatBool(props.ForceNew) }
+		></div>
 		<div class="drawer h-full lg:drawer-open">
 			<input id="notesDrawer" type="checkbox" class="drawer-toggle"/>
 			<div class="drawer-content flex h-full w-full flex-col gap-3 overflow-hidden">

@@ -1,4 +1,5 @@
 import htmx from "htmx.org";
+import "htmx-ext-ws";
 import { dismissAlert } from './alert'
 import { dialogEventHandler } from "./dialog";
 import { applySavedTheme, persistTheme, updateThemeDisplay } from './theme'
@@ -7,6 +8,9 @@ import { initUpdatedLabels } from "./updated_time";
 
 const w = window as any;
 w.htmx = htmx;
+if (!(globalThis as any).htmx) {
+  (globalThis as any).htmx = htmx;
+}
 
 w.dismissAlert = dismissAlert
 w.dialogEventHandler = dialogEventHandler
