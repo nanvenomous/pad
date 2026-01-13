@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,6 +23,7 @@ type notesStreamClient struct {
 	ch         chan []byte
 	selectedID string
 	forceNew   bool
+	closeOnce  sync.Once
 }
 
 type notesHub struct {
@@ -58,7 +58,9 @@ func (h *notesHub) unregister(client *notesStreamClient) {
 		return
 	}
 	delete(h.clients, client)
-	close(client.ch)
+	client.closeOnce.Do(func() {
+		close(client.ch)
+	})
 }
 
 func (h *notesHub) snapshot() []*notesStreamClient {
@@ -86,10 +88,20 @@ func (h *notesHub) broadcast(store *notes.Store) {
 			log.Printf("notes stream render: %v", err)
 			continue
 		}
-		select {
-		case client.ch <- payload:
-		default:
+		h.safeSend(client, payload)
+	}
+}
+
+func (h *notesHub) safeSend(client *notesStreamClient, payload []byte) {
+	defer func() {
+		if recover() != nil {
+			h.unregister(client)
 		}
+	}()
+
+	select {
+	case client.ch <- payload:
+	default:
 	}
 }
 
@@ -176,28 +188,36 @@ func startNotesWatcher(store *notes.Store, dir string) {
 
 	go func() {
 		defer watcher.Close()
-		lastSeen := make(map[string]time.Time)
+		timer := time.NewTimer(0)
+		if !timer.Stop() {
+			<-timer.C
+		}
+		pending := false
 		for {
 			select {
 			case event, ok := <-watcher.Events:
 				if !ok {
 					return
 				}
-				if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Rename) == 0 {
+				if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) == 0 {
 					continue
 				}
-				filename := filepath.Base(event.Name)
-				if filepath.Ext(filename) != notesFileExtension {
+				pending = true
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				timer.Reset(200 * time.Millisecond)
+			case <-timer.C:
+				if !pending {
 					continue
 				}
-				now := time.Now()
-				if last, ok := lastSeen[filename]; ok && now.Sub(last) < 100*time.Millisecond {
-					continue
-				}
-				lastSeen[filename] = now
-				_, changed, err := store.UpdateFromFile(filename)
+				pending = false
+				changed, err := store.SyncFromFilesystem()
 				if err != nil {
-					log.Printf("notes watcher update: %v", err)
+					log.Printf("notes watcher sync: %v", err)
 					continue
 				}
 				if changed {

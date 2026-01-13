@@ -4,12 +4,17 @@ services:
       - "4000:4000"
     build:
       dockerfile: ./Dockerfile.dev
+      args:
+        USER_ID: ${UID:-1000}
+        GROUP_ID: ${GID:-1000}
+        USER_NAME: ${USER_NAME:-pad}
     environment:
       PAD_NOTES_DIR: /tmp/pad
+    user: "${UID:-1000}:${GID:-1000}"
     volumes:
       - ./:/app
-      - /app/tmp
-      - ./tmp/pad:/tmp/pad
+      - ./tmp:/app/tmp
+      - ./pad:/tmp/pad
     networks:
       - net
 

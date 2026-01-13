@@ -10,7 +10,7 @@ tasks:
     desc: 'generate templ files and the build the pcf binary'
     deps: [js, tailwind, templ]
     cmds:
-      - go build -o pad ./main.go
+      - go build -o ./tmp/pad ./main.go
 
   js:
     desc: 'run bun javascript bundler'

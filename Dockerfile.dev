@@ -1,5 +1,9 @@
 FROM golang:1.25-alpine
 
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+ARG USER_NAME=pad
+
 # Install system dependencies
 RUN apk add --no-cache curl unzip bash libgcc libstdc++
 
@@ -13,8 +17,9 @@ RUN go install github.com/air-verse/air@latest
 RUN go install github.com/a-h/templ/cmd/templ@latest
 
 # Install bun
+ENV BUN_INSTALL=/usr/local/bun
 RUN curl -fsSL https://bun.sh/install | bash
-ENV PATH="/root/.bun/bin:$PATH"
+ENV PATH="/usr/local/bun/bin:/go/bin:$PATH"
 
 WORKDIR /app
 
@@ -32,7 +37,14 @@ COPY Taskfile.yml ./
 # Copy air configuration
 COPY .air.toml ./
 
+# Create runtime user
+RUN addgroup -g ${GROUP_ID} ${USER_NAME} \
+  && adduser -D -u ${USER_ID} -G ${USER_NAME} ${USER_NAME}
+
 # Create tmp directory for builds
-RUN mkdir -p tmp
+RUN mkdir -p tmp \
+  && chown -R ${USER_ID}:${GROUP_ID} /app /tmp
+
+USER ${USER_NAME}
 
 CMD ["air"]

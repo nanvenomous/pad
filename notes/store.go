@@ -10,8 +10,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	gonanoid "github.com/matoous/go-nanoid/v2"
 )
 
 var (
@@ -48,6 +46,9 @@ func NewStore(dir string) (*Store, error) {
 	}
 
 	if err := store.load(); err != nil {
+		return nil, err
+	}
+	if _, err := store.SyncFromFilesystem(); err != nil {
 		return nil, err
 	}
 
@@ -107,12 +108,12 @@ func (s *Store) Create(title, body string) (Note, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	id, err := gonanoid.New()
-	if err != nil {
-		return Note{}, err
-	}
-
 	now := time.Now().UTC()
+	filename := s.uniqueFilename(slugify(title), "")
+	id := strings.TrimSuffix(filename, notesFileExtension)
+	if !isValidID(id) {
+		return Note{}, ErrInvalidID
+	}
 	title = NormalizeTitle(title)
 	note := Note{
 		ID:        id,
@@ -125,6 +126,7 @@ func (s *Store) Create(title, body string) (Note, error) {
 	}
 
 	s.notes[id] = note
+	s.filenames[id] = filename
 	return note, s.save(note)
 }
 
@@ -218,86 +220,136 @@ func (s *Store) Delete(id string, expectedRevision int) (Note, error) {
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	note, ok := s.notes[id]
 	if !ok {
+		s.mu.Unlock()
 		return Note{}, ErrNotFound
 	}
 
 	if expectedRevision > 0 && expectedRevision != note.Revision {
+		s.mu.Unlock()
 		return note, ErrConflict
 	}
 
-	note.Deleted = true
-	note.UpdatedAt = time.Now().UTC()
-	note.Revision++
-	s.notes[id] = note
+	filename := s.filenameFromMetadata(note.ID, s.filenames[note.ID])
+	s.mu.Unlock()
 
-	return note, s.save(note)
+	if filename == "" {
+		return note, ErrNotFound
+	}
+	if err := os.Remove(s.notePath(filename)); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return note, ErrNotFound
+		}
+		return note, err
+	}
+
+	_, err := s.SyncFromFilesystem()
+	return note, err
 }
 
-func (s *Store) UpdateFromFile(filename string) (Note, bool, error) {
-	if filepath.Ext(filename) != notesFileExtension {
-		return Note{}, false, nil
-	}
-
-	if _, err := os.Stat(s.notePath(filename)); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return Note{}, false, nil
-		}
-		return Note{}, false, err
-	}
-
-	body, err := s.loadBodyByFilename(filename)
+func (s *Store) SyncFromFilesystem() (bool, error) {
+	entries, err := os.ReadDir(s.dir)
 	if err != nil {
-		return Note{}, false, err
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	type fileSnapshot struct {
+		filename string
+		body     string
+		modTime  time.Time
+	}
+
+	snapshots := make([]fileSnapshot, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if filepath.Ext(entry.Name()) != notesFileExtension {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return false, err
+		}
+		body, err := s.loadBodyByFilename(entry.Name())
+		if err != nil {
+			return false, err
+		}
+		snapshots = append(snapshots, fileSnapshot{
+			filename: entry.Name(),
+			body:     body,
+			modTime:  info.ModTime().UTC(),
+		})
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	id := s.idForFilename(filename)
-	if id == "" {
-		id = strings.TrimSuffix(filename, notesFileExtension)
-		if !isValidID(id) {
-			return Note{}, false, nil
-		}
-	}
+	nextNotes := make(map[string]Note, len(snapshots))
+	nextFilenames := make(map[string]string, len(snapshots))
+	changed := len(s.notes) != len(snapshots)
 
-	note, ok := s.notes[id]
-	if !ok {
-		if !s.isFilenameAvailable(filename, id) {
-			return Note{}, false, nil
+	for _, snapshot := range snapshots {
+		id := strings.TrimSuffix(snapshot.filename, notesFileExtension)
+		if !isValidID(id) {
+			continue
 		}
-		now := time.Now().UTC()
-		title := titleFromFile(body, filename)
-		note = Note{
+		updatedAt := snapshot.modTime
+		if updatedAt.IsZero() {
+			updatedAt = time.Now().UTC()
+		}
+		title := titleFromFile(snapshot.body, snapshot.filename)
+		existing, ok := s.notes[id]
+		revision := 1
+		createdAt := updatedAt
+		if ok {
+			createdAt = existing.CreatedAt
+			revision = existing.Revision
+			if existing.Body != snapshot.body {
+				revision++
+			}
+			if existing.Deleted {
+				changed = true
+			}
+		} else {
+			changed = true
+		}
+
+		note := Note{
 			ID:        id,
 			Title:     title,
-			Body:      body,
-			CreatedAt: now,
-			UpdatedAt: now,
-			Revision:  1,
+			Body:      snapshot.body,
+			CreatedAt: createdAt,
+			UpdatedAt: updatedAt,
+			Revision:  revision,
 			Deleted:   false,
 		}
-		s.notes[id] = note
-		s.filenames[id] = filename
-		return note, true, s.saveWithFilename(note, true)
+		nextNotes[id] = note
+		nextFilenames[id] = snapshot.filename
+
+		if ok {
+			if existing.Title != note.Title || existing.Body != note.Body || !existing.UpdatedAt.Equal(note.UpdatedAt) {
+				changed = true
+			}
+		}
 	}
 
-	if note.Body == body && !note.Deleted {
-		return note, false, nil
+	if !changed {
+		return false, nil
 	}
 
-	note.Body = body
-	note.Title = titleFromFile(body, filename)
-	note.UpdatedAt = time.Now().UTC()
-	note.Revision++
-	note.Deleted = false
-	s.notes[id] = note
+	s.notes = nextNotes
+	s.filenames = nextFilenames
 
-	return note, true, s.save(note)
+	if err := s.saveMetadata(); err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 func (s *Store) load() error {
@@ -394,6 +446,10 @@ func (s *Store) saveWithFilename(note Note, lockFilename bool) error {
 		return err
 	}
 
+	return s.saveMetadata()
+}
+
+func (s *Store) saveMetadata() error {
 	payload, err := json.MarshalIndent(s.metadataSnapshot(), "", "  ")
 	if err != nil {
 		return err
@@ -493,33 +549,13 @@ func (s *Store) filenameFromMetadata(id, filename string) string {
 
 func (s *Store) ensureFilename(note Note, lockFilename bool) string {
 	current := s.filenameFromMetadata(note.ID, s.filenames[note.ID])
-	if lockFilename && current != "" {
+	if current != "" {
 		s.filenames[note.ID] = current
 		return current
 	}
-	desired := s.uniqueFilename(slugify(note.Title), note.ID)
-	if current != desired {
-		oldPath := s.notePath(current)
-		newPath := s.notePath(desired)
-		if _, err := os.Stat(oldPath); err == nil {
-			if err := os.Rename(oldPath, newPath); err == nil {
-				current = desired
-			}
-		} else {
-			current = desired
-		}
-	}
-	s.filenames[note.ID] = current
-	return current
-}
-
-func (s *Store) idForFilename(filename string) string {
-	for id, existing := range s.filenames {
-		if existing == filename {
-			return id
-		}
-	}
-	return ""
+	filename := s.filenameFromMetadata(note.ID, note.ID)
+	s.filenames[note.ID] = filename
+	return filename
 }
 
 func titleFromFile(body, filename string) string {
