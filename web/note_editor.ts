@@ -122,6 +122,9 @@ function renderBlocks(state: EditorState): void {
     blockEl.dataset.lineEnd = String(block.end);
     blockEl.dataset.blockType = block.type;
     blockEl.addEventListener("click", (event) => {
+      if (blockEl.dataset.editing === "true") {
+        return;
+      }
       const checkbox = findInPath<HTMLInputElement>(
         event,
         "input[type=checkbox][data-line]",
