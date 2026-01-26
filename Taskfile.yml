@@ -32,3 +32,9 @@ tasks:
     cmds:
       - task: build
       - './starter serve'
+
+  reverse:
+    desc: 'test on android by forwarding the ports'
+    cmds:
+      - adb reverse tcp:4000 tcp:4000
+
