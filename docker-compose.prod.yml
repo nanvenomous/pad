@@ -1,0 +1,17 @@
+services:
+  pad:
+    image: ghcr.io/nanvenomous/pad:latest
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./notes:/data/notes
+    environment:
+      PAD_NOTES_DIR: /data/notes
+      PORT: 4000
+    restart: unless-stopped
+    networks:
+      - pad-net
+
+networks:
+  pad-net:
+    driver: bridge

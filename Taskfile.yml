@@ -38,3 +38,29 @@ tasks:
     cmds:
       - adb reverse tcp:4000 tcp:4000
 
+  docker-build:
+    desc: 'build production docker image'
+    cmds:
+      - docker build -t pad:latest -t pad:{{.TAG}} .
+    vars:
+      TAG:
+        sh: git rev-parse --short HEAD
+
+  docker-push:
+    desc: 'build and push production docker image to registry'
+    cmds:
+      - task: docker-build
+      - docker tag pad:latest {{.REGISTRY}}/pad:latest
+      - docker tag pad:{{.TAG}} {{.REGISTRY}}/pad:{{.TAG}}
+      - docker push {{.REGISTRY}}/pad:latest
+      - docker push {{.REGISTRY}}/pad:{{.TAG}}
+    vars:
+      TAG:
+        sh: git rev-parse --short HEAD
+      REGISTRY: '{{.REGISTRY | default "ghcr.io/nanvenomous"}}'
+
+  docker-run:
+    desc: 'run production docker image locally'
+    cmds:
+      - docker run -p 4000:4000 -v ./pad:/data/notes pad:latest
+

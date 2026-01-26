@@ -1,0 +1,32 @@
+# Git
+.git
+.gitignore
+
+# Development files
+.air.toml
+Dockerfile.dev
+docker-compose.yml
+docker-compose.prod.yml
+Session.vim
+
+# Build artifacts
+tmp/
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+.opencode/
+
+# Notes data
+pad/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation and project files
+*.md
+!readme.md
+LICENSE
+AGENTS.md

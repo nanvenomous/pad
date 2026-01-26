@@ -4,3 +4,53 @@ If there is a sync conflict I'd like to be able to jump to my computer and resol
 Ideally there are not conflicts too often as syncs should happen quickly.
 I like the idea of git for conflict resolution but for the actual syncing I think git might be too slow. 
 Primarily this thing should be easy to use and set up on android (syncthing is not, although it is a joy to set up on linux)
+
+## Quick Start with Docker
+
+Pull and run the latest production image:
+
+```bash
+docker pull ghcr.io/nanvenomous/pad:latest
+docker run -p 4000:4000 -v ./notes:/data/notes ghcr.io/nanvenomous/pad:latest
+```
+
+Or use docker-compose for production:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Or build locally:
+
+```bash
+task docker-build
+task docker-run
+```
+
+## Development
+
+For local development with hot-reloading:
+
+```bash
+docker compose up
+```
+
+## Building for Production
+
+Build the production Docker image:
+
+```bash
+task docker-build
+```
+
+Push to a registry (defaults to GitHub Container Registry):
+
+```bash
+task docker-push
+```
+
+To use a different registry:
+
+```bash
+REGISTRY=docker.io/yourusername task docker-push
+```
