@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "tw": "bun run tailwindcss -i web/input.css -o ./build/css/tailwind-generated.min.css",
-    "js": "bun build web/index.ts --outdir ./build --minify"
+    "js": "bun build web/index.ts --outdir ./build --minify && bun build web/service-worker.ts --outdir ./build --minify"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.14",
