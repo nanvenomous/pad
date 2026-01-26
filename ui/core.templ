@@ -7,7 +7,8 @@ import (
 )
 
 var (
-	logo = "./assets/package.svg"
+	favicon         = "./assets/notebook.svg"
+	appleTouchIcon  = "./assets/apple-touch-icon.png"
 )
 
 func NanoID() string {
@@ -34,8 +35,8 @@ type headerLink struct {
 var (
 	headerLinks = []headerLink{
 		{Rel: "manifest", Href: "/manifest.json"},
-		{Rel: "icon", Href: logo},
-		{Rel: "apple-touch-icon", Href: logo},
+		{Rel: "icon", Href: favicon},
+		{Rel: "apple-touch-icon", Href: appleTouchIcon},
 		{Rel: "stylesheet", Href: "/icons/light/style.css"},
 		{Rel: "stylesheet", Href: "/css/tailwind-generated.min.css"},
 	}
