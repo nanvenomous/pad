@@ -101,14 +101,8 @@ func NotesNewHandler(w http.ResponseWriter, r *http.Request) {
 // NotesSyncHandler handles visibility-based sync requests
 // Returns the current state via HTMX OOB swaps
 func NotesSyncHandler(w http.ResponseWriter, r *http.Request) {
-	// Backend throttling: only sync if hidden for >2 seconds
-	// This avoids syncing on quick tab switches but catches PWA reopens
-	hiddenMs, _ := strconv.ParseInt(r.URL.Query().Get("hidden_ms"), 10, 64)
-	if hiddenMs < 2000 {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-
+	// Always sync - frontend is smart about when to trigger
+	// This is critical for PWA minimize/restore scenarios
 	selectedID := strings.TrimSpace(r.URL.Query().Get("id"))
 	forceNew, _ := strconv.ParseBool(r.URL.Query().Get("new"))
 

@@ -3,11 +3,13 @@
 
 let lastHiddenTime = 0;
 let lastSyncTime = 0;
-let isInitialLoad = true;
+let hasLoadedOnce = false;
 
 function triggerSync() {
   const now = Date.now();
   const hiddenDuration = now - lastHiddenTime;
+  
+  console.log('[Pad Sync] Triggering sync - hidden for', hiddenDuration, 'ms');
   
   // Get current note ID from the DOM
   const selectedNote = document.querySelector('[data-note-id]');
@@ -26,20 +28,35 @@ function triggerSync() {
 }
 
 export function initSyncOnVisibility() {
-  // Handle visibility changes (tab switching, backgrounding)
+  // Initialize on first load
+  const now = Date.now();
+  lastHiddenTime = now;
+  lastSyncTime = now;
+  
+  // Handle visibility changes (tab switching, backgrounding, PWA minimize/restore)
   document.addEventListener('visibilitychange', () => {
+    const now = Date.now();
+    
     if (document.hidden) {
-      lastHiddenTime = Date.now();
+      lastHiddenTime = now;
+      console.log('[Pad Sync] App hidden at', lastHiddenTime);
       return;
     }
     
-    // Skip initial load (handled by pageshow)
-    if (isInitialLoad) {
-      isInitialLoad = false;
-      return;
+    const hiddenDuration = now - lastHiddenTime;
+    const timeSinceLastSync = now - lastSyncTime;
+    
+    console.log('[Pad Sync] App visible - hasLoadedOnce:', hasLoadedOnce, 
+                'hidden:', hiddenDuration, 'ms, time since last sync:', timeSinceLastSync, 'ms');
+    
+    // Sync if:
+    // 1. Not initial load, AND
+    // 2. Either hidden for >1s OR it's been >5s since last sync
+    if (hasLoadedOnce && (hiddenDuration > 1000 || timeSinceLastSync > 5000)) {
+      triggerSync();
+    } else {
+      console.log('[Pad Sync] Skipping sync - too recent');
     }
-
-    triggerSync();
   });
 
   // Handle page show (critical for PWAs!)
@@ -50,11 +67,11 @@ export function initSyncOnVisibility() {
   window.addEventListener('pageshow', (event) => {
     const now = Date.now();
     
-    // On initial page load, just record the time
-    if (isInitialLoad && !event.persisted) {
-      lastHiddenTime = now;
-      lastSyncTime = now;
-      isInitialLoad = false;
+    console.log('[Pad Sync] pageshow - persisted:', event.persisted, 'hasLoadedOnce:', hasLoadedOnce);
+    
+    // On initial page load, just mark as loaded
+    if (!hasLoadedOnce && !event.persisted) {
+      hasLoadedOnce = true;
       return;
     }
     
@@ -62,7 +79,7 @@ export function initSyncOnVisibility() {
     // or if it's been >2 seconds since last sync, trigger sync
     if (event.persisted || (now - lastSyncTime) > 2000) {
       // Set hidden time to simulate being away
-      if (lastHiddenTime === 0) {
+      if (lastHiddenTime === 0 || (now - lastHiddenTime) < 1000) {
         lastHiddenTime = now - 10000; // Assume 10s away if unknown
       }
       triggerSync();
@@ -74,9 +91,9 @@ export function initSyncOnVisibility() {
     const now = Date.now();
     
     // Only trigger if it's been >2 seconds since last sync
-    // and we're not on initial load
-    if (!isInitialLoad && (now - lastSyncTime) > 2000) {
-      if (lastHiddenTime === 0) {
+    // and we've loaded once already
+    if (hasLoadedOnce && (now - lastSyncTime) > 2000) {
+      if (lastHiddenTime === 0 || (now - lastHiddenTime) < 1000) {
         lastHiddenTime = now - 5000; // Assume 5s away
       }
       triggerSync();

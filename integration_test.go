@@ -445,26 +445,27 @@ func TestIntegration_VisibilitySync(t *testing.T) {
 	}
 }
 
-// TestIntegration_VisibilitySyncThrottled tests that sync requests are throttled
+// TestIntegration_VisibilitySyncThrottled tests that sync always returns current state
 func TestIntegration_VisibilitySyncThrottled(t *testing.T) {
 	server, _ := setupTestServer(t)
 	defer server.Close()
 
 	noteID := createNote(t, server, "", "# Throttle Test", "# Throttle Test\n\nContent")
 
-	// Simulate visibility change after only 1 second (below 2s threshold)
+	// Backend no longer throttles - always returns current state
+	// Frontend handles throttling based on time since last sync
 	resp := syncNotesAfterVisibility(t, server, noteID, 1000)
 
-	// Should return 204 No Content (throttled)
-	if resp.StatusCode != http.StatusNoContent {
-		t.Errorf("expected 204 (throttled), got %d", resp.StatusCode)
+	// Should return 200 OK (no throttling on backend)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 
-	// Simulate visibility change after 3 seconds (above threshold)
+	// Second sync also works
 	resp2 := syncNotesAfterVisibility(t, server, noteID, 3000)
 
-	// Should return 200 OK (not throttled)
+	// Should return 200 OK
 	if resp2.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp2.StatusCode)
 	}
