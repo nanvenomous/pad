@@ -7,13 +7,9 @@ export async function shareNote(id: string, title: string): Promise<void> {
   // In PWA or mobile browsers, navigator.share should be available
   if (navigator.share) {
     try {
-      // Get the note content from the editor
-      const noteContent = getNoteContent(id);
-      
-      // Construct share data
+      // Construct share data - just share the link, not the content
       const shareData: ShareData = {
         title: title || 'Note',
-        text: noteContent || '',
         url: shareUrl
       };
 
@@ -42,18 +38,4 @@ export async function shareNote(id: string, title: string): Promise<void> {
       showAlert('Failed to copy link to clipboard', 'error');
     }
   }
-}
-
-function getNoteContent(id: string): string {
-  // Try to get content from the current editor if it matches the note ID
-  const noteIdInput = document.getElementById('noteId') as HTMLInputElement | null;
-  if (noteIdInput && noteIdInput.value === id) {
-    const textarea = document.querySelector<HTMLTextAreaElement>('[data-note-body]');
-    if (textarea) {
-      return textarea.value;
-    }
-  }
-  
-  // Fallback: return empty if content can't be found
-  return '';
 }
