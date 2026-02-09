@@ -1,4 +1,5 @@
 import htmx from "htmx.org";
+import { shareNote } from "./share";
 
 const longPressDelayMs = 500;
 
@@ -24,6 +25,14 @@ function openActions(id: string, title: string, revision: string, x: number, y: 
     moveButton.setAttribute("hx-get", `/notes/move-modal?id=${encodeURIComponent(id)}`);
     htmx.process(moveButton);
   }
+  
+  // Set up share button with note data
+  const shareButton = menu.querySelector<HTMLElement>("[data-actions-share]");
+  if (shareButton) {
+    shareButton.dataset.shareId = id;
+    shareButton.dataset.shareTitle = title;
+  }
+  
   menu.style.left = `${x}px`;
   menu.style.top = `${y}px`;
   menu.classList.remove("hidden");
@@ -124,6 +133,18 @@ export function initNoteActions(root: ParentNode = document): void {
     if (!target) {
       return;
     }
+    
+    // Handle share button click
+    const shareButton = target.closest("[data-actions-share]") as HTMLElement | null;
+    if (shareButton) {
+      const id = shareButton.dataset.shareId;
+      const title = shareButton.dataset.shareTitle;
+      if (id && title) {
+        shareNote(id, title);
+      }
+      return;
+    }
+    
     if (target.closest("[data-actions-close]")) {
       closeActionsMenu();
       return;
@@ -170,7 +191,7 @@ function closeActionsMenu(): void {
 function clampPoint(x: number, y: number): { x: number; y: number } {
   const margin = 12;
   const menuWidth = 240;
-  const menuHeight = 180;
+  const menuHeight = 220; // Increased to accommodate share button
   const maxX = Math.max(margin, window.innerWidth - menuWidth - margin);
   const maxY = Math.max(margin, window.innerHeight - menuHeight - margin);
   const nextX = Math.min(Math.max(margin, x), maxX);

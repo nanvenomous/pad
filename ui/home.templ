@@ -251,6 +251,12 @@ templ NotesMain(props PropsNotesMain, swapOOB bool) {
 		if swapOOB {
 			hx-swap-oob="true"
 		}
+		if props.HasSelection && !swapOOB {
+			hx-get={ "/notes/select?id=" + url.QueryEscape(props.Editor.ID) }
+			hx-trigger="load"
+			hx-swap="none"
+			hx-push-url={ "/?id=" + url.QueryEscape(props.Editor.ID) }
+		}
 	>
 		@NotesStream(props, false)
 		<div class="drawer h-full lg:drawer-open">

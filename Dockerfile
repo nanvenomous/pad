@@ -7,7 +7,7 @@ WORKDIR /build
 RUN apk add --no-cache curl unzip bash libgcc libstdc++
 
 # Install templ
-RUN go install github.com/a-h/templ/cmd/templ@latest
+RUN go install github.com/a-h/templ/cmd/templ@v0.3.960
 
 # Install bun
 ENV BUN_INSTALL=/usr/local/bun

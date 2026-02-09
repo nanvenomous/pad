@@ -50,6 +50,7 @@ func init() {
 
 		mux.HandleFunc("/notes/select", NotesSelectHandler)
 		mux.HandleFunc("/notes/new", NotesNewHandler)
+		mux.HandleFunc("/notes/sync", NotesSyncHandler)
 		mux.HandleFunc("/notes/save", NotesSaveHandler)
 		mux.HandleFunc("/notes/delete", NotesDeleteHandler)
 		mux.HandleFunc("/notes/move-modal", NotesMoveModalHandler)
@@ -92,6 +93,32 @@ func NotesNewHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stts, err := render(w, r, ui.NotesMain(mainProps, false))
+	if err != nil {
+		errorHTTP(w, stts, err)
+	}
+}
+
+// NotesSyncHandler handles visibility-based sync requests
+// Returns the current state via HTMX OOB swaps
+func NotesSyncHandler(w http.ResponseWriter, r *http.Request) {
+	// Backend throttling: only sync if hidden for >5 seconds
+	hiddenMs, _ := strconv.ParseInt(r.URL.Query().Get("hidden_ms"), 10, 64)
+	if hiddenMs < 5000 {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	selectedID := strings.TrimSpace(r.URL.Query().Get("id"))
+	forceNew, _ := strconv.ParseBool(r.URL.Query().Get("new"))
+
+	props, err := buildNotesMainProps(selectedID, forceNew, "")
+	if err != nil {
+		errorHTTP(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	// Return all components with OOB swaps (same as autosave response)
+	stts, err := render(w, r, ui.NotesAutosaveResponse(props))
 	if err != nil {
 		errorHTTP(w, stts, err)
 	}

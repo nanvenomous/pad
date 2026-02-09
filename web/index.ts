@@ -1,11 +1,13 @@
 import htmx from "htmx.org";
 import "htmx-ext-ws";
-import { dismissAlert } from './alert'
+import { dismissAlert, showAlert } from './alert'
 import { dialogClose, dialogEventHandler } from "./dialog";
 import { applySavedTheme, persistTheme, updateThemeDisplay } from './theme'
 import { initNoteEditors } from "./note_editor";
 import { initNoteActions, initNoteList } from "./note_list";
 import { initUpdatedLabels } from "./updated_time";
+import { initSyncOnVisibility } from "./sync";
+import { shareNote } from "./share";
 
 const w = window as any;
 w.htmx = htmx;
@@ -28,17 +30,20 @@ if ('serviceWorker' in navigator) {
 }
 
 w.dismissAlert = dismissAlert
+w.showAlert = showAlert
 w.dialogEventHandler = dialogEventHandler
 w.dialogClose = dialogClose
 w.applySavedTheme = applySavedTheme
 w.persistTheme = persistTheme
 w.updateThemeDisplay = updateThemeDisplay
+w.shareNote = shareNote
 
 const initEditorsOnce = () => {
   initNoteEditors(document);
   initNoteActions(document);
   initNoteList(document);
   initUpdatedLabels(document);
+  initSyncOnVisibility();
 };
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initEditorsOnce);

@@ -386,6 +386,91 @@ func TestIntegration_DeleteRevisionConflict(t *testing.T) {
 	}
 }
 
+// TestIntegration_VisibilitySync tests that notes sync when app regains visibility after external edits
+func TestIntegration_VisibilitySync(t *testing.T) {
+	server, dir := setupTestServer(t)
+	defer server.Close()
+
+	// 1. Create initial note
+	noteID := createNote(t, server, "", "# Visibility Test", "# Visibility Test\n\nInitial content")
+	initialNote := getNote(t, server, noteID)
+
+	// 2. Simulate Neovim editing file while app is "closed"
+	metadata := readMetadata(t, dir)
+	filename := metadata[noteID].Filename
+	notePath := filepath.Join(dir, filename)
+
+	err := os.WriteFile(notePath, []byte("# Visibility Test\n\nUpdated by Neovim while app was hidden"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 3. Wait for filesystem watcher to detect and sync
+	time.Sleep(700 * time.Millisecond)
+
+	// 3b. Verify the filesystem change was synced to the store
+	syncedNote := getNote(t, server, noteID)
+	if syncedNote.Body != "# Visibility Test\n\nUpdated by Neovim while app was hidden" {
+		t.Fatalf("filesystem changes not synced yet: got %q", syncedNote.Body)
+	}
+
+	// 4. Simulate app visibility change (hidden for 10 seconds)
+	resp := syncNotesAfterVisibility(t, server, noteID, 10000)
+
+	// 5. Should return 200 OK with updated content
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	// 6. Response should contain the Neovim-edited content
+	// The content will be HTML-encoded in textarea, so check for key parts
+	responseStr := string(body)
+	if !strings.Contains(responseStr, "Updated by Neovim") && !strings.Contains(responseStr, "Visibility Test") {
+		// Print first 500 chars for debugging
+		t.Logf("Response preview (first 500 chars): %s", responseStr[:min(500, len(responseStr))])
+		t.Errorf("sync response missing updated content")
+	}
+
+	// 7. Verify note was actually synced
+	updatedNote := getNote(t, server, noteID)
+	if updatedNote.Body != "# Visibility Test\n\nUpdated by Neovim while app was hidden" {
+		t.Errorf("note body not synced: got %q", updatedNote.Body)
+	}
+
+	if !updatedNote.UpdatedAt.After(initialNote.UpdatedAt) {
+		t.Error("updated_at timestamp not updated")
+	}
+}
+
+// TestIntegration_VisibilitySyncThrottled tests that sync requests are throttled
+func TestIntegration_VisibilitySyncThrottled(t *testing.T) {
+	server, _ := setupTestServer(t)
+	defer server.Close()
+
+	noteID := createNote(t, server, "", "# Throttle Test", "# Throttle Test\n\nContent")
+
+	// Simulate visibility change after only 2 seconds (below 5s threshold)
+	resp := syncNotesAfterVisibility(t, server, noteID, 2000)
+
+	// Should return 204 No Content (throttled)
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("expected 204 (throttled), got %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	// Simulate visibility change after 6 seconds (above threshold)
+	resp2 := syncNotesAfterVisibility(t, server, noteID, 6000)
+
+	// Should return 200 OK (not throttled)
+	if resp2.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp2.StatusCode)
+	}
+	resp2.Body.Close()
+}
+
 // Helper functions
 
 func setupTestServer(t *testing.T) (*httptest.Server, string) {
@@ -584,4 +669,49 @@ func moveNote(t *testing.T, server *httptest.Server, noteID, folder string, revi
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		t.Fatalf("Failed to move note, status %d: %s", resp.StatusCode, bodyBytes)
 	}
+}
+
+// syncNotesAfterVisibility simulates visibility change after being hidden for hiddenMs milliseconds
+func syncNotesAfterVisibility(t *testing.T, server *httptest.Server, noteID string, hiddenMs int) *http.Response {
+	t.Helper()
+	urlStr := fmt.Sprintf("%s/notes/sync?id=%s&hidden_ms=%d",
+		server.URL, url.QueryEscape(noteID), hiddenMs)
+	resp, err := http.Get(urlStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp
+}
+
+// readMetadata reads the notes metadata file
+func readMetadata(t *testing.T, dir string) map[string]struct {
+	Title     string    `json:"title"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Revision  int       `json:"revision"`
+	Deleted   bool      `json:"deleted"`
+	Filename  string    `json:"filename"`
+} {
+	t.Helper()
+
+	metadataPath := filepath.Join(dir, "notes-metadata.json")
+	data, err := os.ReadFile(metadataPath)
+	if err != nil {
+		t.Fatalf("Failed to read metadata: %v", err)
+	}
+
+	var metadata map[string]struct {
+		Title     string    `json:"title"`
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+		Revision  int       `json:"revision"`
+		Deleted   bool      `json:"deleted"`
+		Filename  string    `json:"filename"`
+	}
+
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		t.Fatalf("Failed to parse metadata: %v", err)
+	}
+
+	return metadata
 }

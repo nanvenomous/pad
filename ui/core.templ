@@ -89,35 +89,46 @@ templ ActionsMenuPopover() {
 			<li class="menu-title text-xs uppercase tracking-[0.2em] text-base-content/50">
 				<span data-actions-title></span>
 			</li>
-			<li>
-				<button
-					type="button"
-					class="justify-start"
-					data-actions-move
-					data-actions-close
-					hx-target="#modal"
-					hx-swap="outerHTML"
-				>
-					@icon("", "ph-folder text-base")
-					Move
+		<li>
+			<button
+				type="button"
+				class="justify-start"
+				data-actions-move
+				data-actions-close
+				hx-target="#modal"
+				hx-swap="outerHTML"
+			>
+				@icon("", "ph-folder text-base")
+				Move
+			</button>
+		</li>
+		<li>
+			<button
+				type="button"
+				class="justify-start"
+				data-actions-share
+				data-actions-close
+			>
+				@icon("", "ph-share-network text-base")
+				Share
+			</button>
+		</li>
+		<li>
+			<form
+				data-actions-delete-form
+				data-actions-close
+				hx-post="/notes/delete"
+				hx-target="#notesMain"
+				hx-swap="outerHTML"
+			>
+				<input type="hidden" name="id" data-actions-id/>
+				<input type="hidden" name="revision" data-actions-revision/>
+				<button class="text-error justify-start" type="submit">
+					@icon("", "ph-trash text-base")
+					Delete
 				</button>
-			</li>
-			<li>
-				<form
-					data-actions-delete-form
-					data-actions-close
-					hx-post="/notes/delete"
-					hx-target="#notesMain"
-					hx-swap="outerHTML"
-				>
-					<input type="hidden" name="id" data-actions-id/>
-					<input type="hidden" name="revision" data-actions-revision/>
-					<button class="text-error justify-start" type="submit">
-						@icon("", "ph-trash text-base")
-						Delete
-					</button>
-				</form>
-			</li>
+			</form>
+		</li>
 		</ul>
 	</details>
 }
