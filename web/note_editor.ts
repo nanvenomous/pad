@@ -1,6 +1,6 @@
 import MarkdownIt from "markdown-it";
 
-type BlockType = "blank" | "line" | "fence";
+type BlockType = "blank" | "line" | "fence" | "list";
 
 type Block = {
   start: number;
@@ -89,6 +89,33 @@ function buildBlocks(lines: string[]): Block[] {
       i += 1;
       continue;
     }
+    // Check if this line starts a list (ordered or unordered)
+    if (isListLine(line)) {
+      let j = i + 1;
+      // Continue while we have list items or blank lines within the list
+      while (j < lines.length) {
+        const nextLine = lines[j];
+        if (nextLine.trim() === "") {
+          // Peek ahead - if next non-blank line is a list item, include blank
+          let k = j + 1;
+          while (k < lines.length && lines[k].trim() === "") {
+            k += 1;
+          }
+          if (k < lines.length && isListLine(lines[k])) {
+            j = k;
+            continue;
+          }
+          break;
+        }
+        if (!isListLine(nextLine)) {
+          break;
+        }
+        j += 1;
+      }
+      blocks.push({ start: i, end: j - 1, type: "list" });
+      i = j;
+      continue;
+    }
     blocks.push({ start: i, end: i, type: "line" });
     i += 1;
   }
@@ -96,6 +123,12 @@ function buildBlocks(lines: string[]): Block[] {
     blocks.push({ start: 0, end: 0, type: "blank" });
   }
   return blocks;
+}
+
+function isListLine(line: string): boolean {
+  // Match ordered list (1. 2. etc) or unordered list (- * +)
+  // Allow any amount of leading whitespace for indentation
+  return /^\s*(\d+\.|-|\*|\+)\s+/.test(line);
 }
 
 function fenceMarker(line: string): { char: string; length: number } | null {
@@ -147,6 +180,10 @@ function renderBlocks(state: EditorState): void {
       const text = state.lines.slice(block.start, block.end + 1).join("\n");
       blockEl.classList.add("note-fence");
       blockEl.innerHTML = md.render(text);
+    } else if (block.type === "list") {
+      const text = state.lines.slice(block.start, block.end + 1).join("\n");
+      blockEl.classList.add("note-list");
+      renderListBlock(blockEl, text, block.start, block.end, index, state);
     } else {
       const text = state.lines[block.start] ?? "";
       renderLineBlock(blockEl, text, block.start, index);
@@ -155,6 +192,60 @@ function renderBlocks(state: EditorState): void {
   state.render.appendChild(blockEl);
   });
   state.render.scrollTop = scrollTop;
+}
+
+function renderListBlock(
+  blockEl: HTMLElement,
+  text: string,
+  startLine: number,
+  endLine: number,
+  blockIndex: number,
+  state: EditorState,
+): void {
+  // Check if this list contains any task items
+  const lines = text.split("\n");
+  const hasTaskItems = lines.some(line => /^\s*[-*+]\s+\[( |x|X)\]/.test(line));
+  
+  if (hasTaskItems) {
+    // Render line by line with custom task handling
+    lines.forEach((line, idx) => {
+      const lineIndex = startLine + idx;
+      const taskMatch = line.match(/^\s*[-*+]\s+\[( |x|X)\]\s+(.*)$/);
+      
+      if (taskMatch) {
+        const indentMatch = line.match(/^\s*/);
+        const indent = indentMatch ? indentMatch[0].length : 0;
+        const checked = taskMatch[1].toLowerCase() === "x";
+        const content = taskMatch[2];
+        const wrapper = document.createElement("div");
+        wrapper.className = "flex items-start gap-2";
+        if (indent > 0) {
+          wrapper.style.marginLeft = `${indent * 0.5}rem`;
+        }
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "checkbox checkbox-xs mt-1";
+        checkbox.checked = checked;
+        checkbox.dataset.line = String(lineIndex);
+        checkbox.dataset.blockIndex = String(blockIndex);
+        checkbox.setAttribute("aria-label", "Toggle task");
+        const text = document.createElement("div");
+        text.className = "note-task-text";
+        text.innerHTML = md.renderInline(content);
+        wrapper.appendChild(checkbox);
+        wrapper.appendChild(text);
+        blockEl.appendChild(wrapper);
+      } else if (line.trim() !== "") {
+        // Regular list item
+        const itemDiv = document.createElement("div");
+        itemDiv.innerHTML = md.render(line);
+        blockEl.appendChild(itemDiv);
+      }
+    });
+  } else {
+    // No task items, render the whole list with markdown-it for proper nesting
+    blockEl.innerHTML = md.render(text);
+  }
 }
 
 function renderLineBlock(
