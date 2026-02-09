@@ -102,6 +102,19 @@ func NotesNewHandler(w http.ResponseWriter, r *http.Request) {
 // Returns the current state via HTMX OOB swaps
 // Called whenever the PWA becomes visible to refresh state
 func NotesSyncHandler(w http.ResponseWriter, r *http.Request) {
+	store, err := getNotesStore()
+	if err != nil {
+		errorHTTP(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	// Sync from filesystem to pick up external changes (e.g., from Neovim)
+	// This is critical for PWA reopening after server-side edits
+	if _, err := store.SyncFromFilesystem(); err != nil {
+		errorHTTP(w, http.StatusInternalServerError, err)
+		return
+	}
+
 	selectedID := strings.TrimSpace(r.URL.Query().Get("id"))
 	forceNew, _ := strconv.ParseBool(r.URL.Query().Get("new"))
 
@@ -111,8 +124,9 @@ func NotesSyncHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return all components with OOB swaps (same as autosave response)
-	stts, err := render(w, r, ui.NotesAutosaveResponse(props))
+	// Return full notes UI with OOB swap to replace everything
+	// This is different from autosave which only updates metadata
+	stts, err := render(w, r, ui.NotesMain(props, true))
 	if err != nil {
 		errorHTTP(w, stts, err)
 	}
