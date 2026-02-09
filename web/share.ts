@@ -3,8 +3,9 @@ import { showAlert } from './alert';
 export async function shareNote(id: string, title: string): Promise<void> {
   const shareUrl = window.location.href;
   
-  // Check if Web Share API is available (typically mobile)
-  if (navigator.share && isMobileDevice()) {
+  // Check if Web Share API is available
+  // In PWA or mobile browsers, navigator.share should be available
+  if (navigator.share) {
     try {
       // Get the note content from the editor
       const noteContent = getNoteContent(id);
@@ -16,17 +17,23 @@ export async function shareNote(id: string, title: string): Promise<void> {
         url: shareUrl
       };
 
+      console.log('Attempting to share:', shareData);
       await navigator.share(shareData);
+      console.log('Share successful');
       // Success - no need to show alert as the share sheet provides feedback
     } catch (error) {
       // User cancelled the share or an error occurred
-      if ((error as Error).name !== 'AbortError') {
-        console.error('Error sharing:', error);
-        showAlert('Failed to share note', 'error');
+      const errorName = (error as Error).name;
+      console.error('Share error:', errorName, error);
+      
+      if (errorName !== 'AbortError') {
+        // Real error (not user cancellation)
+        showAlert(`Failed to share: ${errorName}`, 'error');
       }
     }
   } else {
     // Fallback for desktop: copy link to clipboard
+    console.log('Web Share API not available, using clipboard fallback');
     try {
       await navigator.clipboard.writeText(shareUrl);
       showAlert('Link copied to clipboard', 'success');
@@ -49,10 +56,4 @@ function getNoteContent(id: string): string {
   
   // Fallback: return empty if content can't be found
   return '';
-}
-
-function isMobileDevice(): boolean {
-  // Check if the device is likely mobile based on user agent and touch support
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-    (!!navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
 }

@@ -31,6 +31,23 @@ function openActions(id: string, title: string, revision: string, x: number, y: 
   if (shareButton) {
     shareButton.dataset.shareId = id;
     shareButton.dataset.shareTitle = title;
+    
+    // Remove any existing click handler to avoid duplicates
+    const oldHandler = (shareButton as any)._shareClickHandler;
+    if (oldHandler) {
+      shareButton.removeEventListener('click', oldHandler);
+    }
+    
+    // Add direct click handler for immediate response
+    const newHandler = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('Direct share button handler triggered');
+      shareNote(id, title);
+      closeActionsMenu();
+    };
+    shareButton.addEventListener('click', newHandler);
+    (shareButton as any)._shareClickHandler = newHandler;
   }
   
   menu.style.left = `${x}px`;
@@ -137,10 +154,15 @@ export function initNoteActions(root: ParentNode = document): void {
     // Handle share button click
     const shareButton = target.closest("[data-actions-share]") as HTMLElement | null;
     if (shareButton) {
+      console.log('Share button clicked');
       const id = shareButton.dataset.shareId;
       const title = shareButton.dataset.shareTitle;
+      console.log('Share data:', { id, title });
       if (id && title) {
+        console.log('Calling shareNote function');
         shareNote(id, title);
+      } else {
+        console.error('Missing share data:', { id, title });
       }
       return;
     }
