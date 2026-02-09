@@ -445,25 +445,25 @@ func TestIntegration_VisibilitySync(t *testing.T) {
 	}
 }
 
-// TestIntegration_VisibilitySyncThrottled tests that sync always returns current state
-func TestIntegration_VisibilitySyncThrottled(t *testing.T) {
+// TestIntegration_VisibilitySyncAlwaysWorks tests that sync always returns current state
+func TestIntegration_VisibilitySyncAlwaysWorks(t *testing.T) {
 	server, _ := setupTestServer(t)
 	defer server.Close()
 
-	noteID := createNote(t, server, "", "# Throttle Test", "# Throttle Test\n\nContent")
+	noteID := createNote(t, server, "", "# Sync Test", "# Sync Test\n\nContent")
 
-	// Backend no longer throttles - always returns current state
-	// Frontend handles throttling based on time since last sync
-	resp := syncNotesAfterVisibility(t, server, noteID, 1000)
+	// Sync always returns current state
+	// Frontend only triggers on visibility change (after initial load)
+	resp := syncNotesAfterVisibility(t, server, noteID, 0)
 
-	// Should return 200 OK (no throttling on backend)
+	// Should return 200 OK with current state
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 
-	// Second sync also works
-	resp2 := syncNotesAfterVisibility(t, server, noteID, 3000)
+	// Multiple syncs work fine
+	resp2 := syncNotesAfterVisibility(t, server, noteID, 0)
 
 	// Should return 200 OK
 	if resp2.StatusCode != http.StatusOK {
@@ -672,11 +672,11 @@ func moveNote(t *testing.T, server *httptest.Server, noteID, folder string, revi
 	}
 }
 
-// syncNotesAfterVisibility simulates visibility change after being hidden for hiddenMs milliseconds
-func syncNotesAfterVisibility(t *testing.T, server *httptest.Server, noteID string, hiddenMs int) *http.Response {
+// syncNotesAfterVisibility simulates visibility change (app becoming visible)
+func syncNotesAfterVisibility(t *testing.T, server *httptest.Server, noteID string, _ int) *http.Response {
 	t.Helper()
-	urlStr := fmt.Sprintf("%s/notes/sync?id=%s&hidden_ms=%d",
-		server.URL, url.QueryEscape(noteID), hiddenMs)
+	urlStr := fmt.Sprintf("%s/notes/sync?id=%s",
+		server.URL, url.QueryEscape(noteID))
 	resp, err := http.Get(urlStr)
 	if err != nil {
 		t.Fatal(err)

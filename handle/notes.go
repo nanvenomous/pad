@@ -100,9 +100,8 @@ func NotesNewHandler(w http.ResponseWriter, r *http.Request) {
 
 // NotesSyncHandler handles visibility-based sync requests
 // Returns the current state via HTMX OOB swaps
+// Called whenever the PWA becomes visible to refresh state
 func NotesSyncHandler(w http.ResponseWriter, r *http.Request) {
-	// Always sync - frontend is smart about when to trigger
-	// This is critical for PWA minimize/restore scenarios
 	selectedID := strings.TrimSpace(r.URL.Query().Get("id"))
 	forceNew, _ := strconv.ParseBool(r.URL.Query().Get("new"))
 
