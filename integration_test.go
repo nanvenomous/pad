@@ -452,8 +452,8 @@ func TestIntegration_VisibilitySyncThrottled(t *testing.T) {
 
 	noteID := createNote(t, server, "", "# Throttle Test", "# Throttle Test\n\nContent")
 
-	// Simulate visibility change after only 2 seconds (below 5s threshold)
-	resp := syncNotesAfterVisibility(t, server, noteID, 2000)
+	// Simulate visibility change after only 1 second (below 2s threshold)
+	resp := syncNotesAfterVisibility(t, server, noteID, 1000)
 
 	// Should return 204 No Content (throttled)
 	if resp.StatusCode != http.StatusNoContent {
@@ -461,8 +461,8 @@ func TestIntegration_VisibilitySyncThrottled(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	// Simulate visibility change after 6 seconds (above threshold)
-	resp2 := syncNotesAfterVisibility(t, server, noteID, 6000)
+	// Simulate visibility change after 3 seconds (above threshold)
+	resp2 := syncNotesAfterVisibility(t, server, noteID, 3000)
 
 	// Should return 200 OK (not throttled)
 	if resp2.StatusCode != http.StatusOK {
