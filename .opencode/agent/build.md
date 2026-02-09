@@ -50,5 +50,5 @@ Try to extract common logic to avoid duplicate logic which can lead to divergenc
 
 1. Run the build command: `task`
 2. If there are any build errors, analyze them and fix the issues
-3. Re-run `task` until the build passes
-5. Provide a summary of changes made
+3. then run the integration tests with `task test`
+3. fix any broken tests and re-run `task test` until the build passes

@@ -64,3 +64,26 @@ tasks:
     cmds:
       - docker run -p 4000:4000 -v ./pad:/data/notes pad:latest
 
+  test:
+    desc: 'run all tests (Go integration + JavaScript unit)'
+    cmds:
+      - task: test-go
+      - task: test-js
+
+  test-go:
+    desc: 'run Go integration tests'
+    cmds:
+      - go test -v -race -timeout 30s ./...
+
+  test-js:
+    desc: 'run JavaScript/TypeScript unit tests'
+    cmds:
+      - bun test web/*.test.ts
+
+  test-coverage:
+    desc: 'run tests with coverage report'
+    cmds:
+      - go test -v -race -coverprofile=coverage.out -timeout 30s ./...
+      - go tool cover -html=coverage.out -o coverage.html
+      - echo "Coverage report generated at coverage.html"
+

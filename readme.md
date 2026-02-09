@@ -35,6 +35,24 @@ For local development with hot-reloading:
 docker compose up
 ```
 
+### Testing
+
+Run the integration test suite:
+
+```bash
+task test
+```
+
+The test suite covers:
+- ✅ Core CRUD operations
+- ✅ Conflict detection and resolution
+- ✅ Folder management and move operations
+- ✅ Real-time sync via WebSocket
+- ✅ Filesystem watcher integration
+- ✅ Concurrent update handling
+
+See [TESTING.md](TESTING.md) for detailed testing documentation.
+
 ## Building for Production
 
 Build the production Docker image:
